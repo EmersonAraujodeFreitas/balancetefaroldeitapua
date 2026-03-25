@@ -1,59 +1,44 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Diagnóstico de Balancetes</title>
+    <title>Dashboard Condomínio</title>
+    <link rel="stylesheet" href="style.css">
 </head>
 <body>
 
-<h2>📄 Upload de Balancete</h2>
+<div class="container">
+    <h1>📊 Análise de Balancete</h1>
 
-<input type="file" id="file">
-<button onclick="enviar()">Analisar</button>
+    <input type="file" id="file">
+    <button onclick="enviar()">Analisar</button>
 
-<h3>📊 Resultado</h3>
-<pre id="resultado"></pre>
+    <div class="cards">
+        <div class="card">
+            <h3>Score</h3>
+            <p id="score">-</p>
+        </div>
 
-<h3>📜 Histórico</h3>
-<ul id="historico"></ul>
+        <div class="card">
+            <h3>Status</h3>
+            <p id="status">-</p>
+        </div>
 
-<script>
-const API_URL = "http://localhost:3000";
+        <div class="card">
+            <h3>Compras > 10k</h3>
+            <p id="compras">0</p>
+        </div>
 
-async function enviar() {
-    const file = document.getElementById("file").files[0];
+        <div class="card">
+            <h3>Inconsistências</h3>
+            <p id="inconsistencias">0</p>
+        </div>
+    </div>
 
-    const formData = new FormData();
-    formData.append("file", file);
+    <h3>Detalhes</h3>
+    <pre id="detalhes"></pre>
+</div>
 
-    const res = await fetch(API_URL + "/upload", {
-        method: "POST",
-        body: formData
-    });
-
-    const data = await res.json();
-
-    document.getElementById("resultado").innerText =
-        JSON.stringify(data.resultado, null, 2);
-
-    carregarHistorico();
-}
-
-async function carregarHistorico() {
-    const res = await fetch(API_URL + "/historico");
-    const data = await res.json();
-
-    const lista = document.getElementById("historico");
-    lista.innerHTML = "";
-
-    data.forEach(item => {
-        const li = document.createElement("li");
-        li.innerText = item.nome + " - " + new Date(item.data).toLocaleString();
-        lista.appendChild(li);
-    });
-}
-
-carregarHistorico();
-</script>
+<script src="app.js"></script>
 
 </body>
 </html>
