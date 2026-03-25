@@ -1,4 +1,4 @@
-const API = "http://localhost:3000";
+const API = "https://balancetefaroldeitapua.onrender.com";
 
 async function enviar() {
     const file = document.getElementById("file").files[0];
