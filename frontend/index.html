@@ -1,1 +1,59 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Diagnóstico de Balancetes</title>
+</head>
+<body>
 
+<h2>📄 Upload de Balancete</h2>
+
+<input type="file" id="file">
+<button onclick="enviar()">Analisar</button>
+
+<h3>📊 Resultado</h3>
+<pre id="resultado"></pre>
+
+<h3>📜 Histórico</h3>
+<ul id="historico"></ul>
+
+<script>
+const API_URL = "http://localhost:3000";
+
+async function enviar() {
+    const file = document.getElementById("file").files[0];
+
+    const formData = new FormData();
+    formData.append("file", file);
+
+    const res = await fetch(API_URL + "/upload", {
+        method: "POST",
+        body: formData
+    });
+
+    const data = await res.json();
+
+    document.getElementById("resultado").innerText =
+        JSON.stringify(data.resultado, null, 2);
+
+    carregarHistorico();
+}
+
+async function carregarHistorico() {
+    const res = await fetch(API_URL + "/historico");
+    const data = await res.json();
+
+    const lista = document.getElementById("historico");
+    lista.innerHTML = "";
+
+    data.forEach(item => {
+        const li = document.createElement("li");
+        li.innerText = item.nome + " - " + new Date(item.data).toLocaleString();
+        lista.appendChild(li);
+    });
+}
+
+carregarHistorico();
+</script>
+
+</body>
+</html>
