@@ -169,7 +169,7 @@ function escalaBonita(min, max, n = 5) {
 const curto = (v) => Math.abs(v) >= 1000 ? (v / 1000).toLocaleString("pt-BR", { maximumFractionDigits: 0 }) + " mil" : v.toLocaleString("pt-BR");
 
 function graficoMensal(rm) {
-  const W = 760, H = 300, ml = 62, mr = 16, mt = 22, mb = 34;
+  const W = 1040, H = 360, ml = 66, mr = 16, mt = 22, mb = 34;
   const vals = rm.flatMap((m) => [m.receita, m.despesa, m.saldo, 0]);
   const { lo, hi, ticks } = escalaBonita(Math.min(...vals), Math.max(...vals));
   const y = (v) => mt + (H - mt - mb) * (1 - (v - lo) / (hi - lo));
@@ -215,7 +215,7 @@ function categorias() {
   h += `<tr class="total"><td>Total</td>${ms.map((m) => `<td class="n">${brl(totMes[m]).replace("R$", "").trim()}</td>`).join("")}<td class="n">${brl(totalGeral)}</td><td></td></tr></tbody>`;
   $("#tabCats").innerHTML = h;
   // barras horizontais
-  const W = 760, lh = 30, ml = 210, H = cats.length * lh + 10, max = cats[0]?.total || 1;
+  const W = 1040, lh = 34, ml = 240, H = cats.length * lh + 10, max = cats[0]?.total || 1;
   let g = "";
   cats.forEach((c, i) => {
     const w = (W - ml - 120) * (c.total / max);

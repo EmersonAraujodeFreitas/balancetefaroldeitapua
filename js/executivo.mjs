@@ -110,7 +110,7 @@ function rosca(meses) {
 
 // -------------------------------------------------- composição mensal empilhada por categoria
 function empilhado(meses) {
-  const W = 760, H = 300, ml = 60, mr = 16, mt = 16, mb = 34;
+  const W = 1040, H = 360, ml = 64, mr = 16, mt = 16, mb = 34;
   const { top } = topCategorias(meses);
   const nomes = top.map((c) => c.cat);
   const dados = meses.map((b) => {
@@ -190,15 +190,15 @@ function variacaoCategorias(meses) {
 // -------------------------------------------------- top fornecedores
 function topFornecedores(meses, n = 10) {
   const fs = porFornecedor(meses), tot = fs.reduce((s, f) => s + f.total, 0), top = fs.slice(0, n);
-  const W = 760, lh = 32, ml = 260, mr = 150, H = top.length * lh + 6, m = top[0]?.total || 1;
+  const W = 1040, lh = 38, ml = 300, mr = 170, H = top.length * lh + 6, m = top[0]?.total || 1;
   let g = "", acum = 0;
   top.forEach((f, i) => {
     acum += f.total;
     const yy = 4 + i * lh, w = (f.total / m) * (W - ml - mr);
-    g += `<text x="${ml - 12}" y="${yy + 17}" text-anchor="end" class="cat">${xEsc(f.forn.length > 38 ? f.forn.slice(0, 36) + "…" : f.forn)}</text>`;
-    g += `<rect x="${ml}" y="${yy + 5}" width="${W - ml - mr}" height="16" rx="3" fill="var(--surface-2)"/>`;
-    g += `<rect x="${ml}" y="${yy + 5}" width="${Math.max(2, w)}" height="16" rx="3" fill="var(--accent)" data-tip="${xEsc(`${f.forn} · ${xBrl(f.total)} em ${f.n} lançamentos (${f.meses.size} meses)`)}"/>`;
-    g += `<text x="${W - mr + 10}" y="${yy + 17}" class="anot">${xCurto(f.total)}</text><text x="${W - 8}" y="${yy + 17}" text-anchor="end">${xPct(f.total / tot)}</text>`;
+    g += `<text x="${ml - 12}" y="${yy + 21}" text-anchor="end" class="cat">${xEsc(f.forn.length > 38 ? f.forn.slice(0, 36) + "…" : f.forn)}</text>`;
+    g += `<rect x="${ml}" y="${yy + 6}" width="${W - ml - mr}" height="20" rx="4" fill="#e9eef4"/>`;
+    g += `<rect x="${ml}" y="${yy + 6}" width="${Math.max(2, w)}" height="20" rx="4" fill="var(--accent)" data-tip="${xEsc(`${f.forn} · ${xBrl(f.total)} em ${f.n} lançamentos (${f.meses.size} meses)`)}"/>`;
+    g += `<text x="${W - mr + 12}" y="${yy + 21}" class="anot">${xCurto(f.total)}</text><text x="${W - 8}" y="${yy + 21}" text-anchor="end">${xPct(f.total / tot)}</text>`;
   });
   return { svg: `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Maiores fornecedores">${g}</svg>`, conc: acum / tot, n: top.length };
 }
