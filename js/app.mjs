@@ -1,4 +1,5 @@
 import { lerBalancete, conferir } from "./parser.mjs";
+import { renderExecutivo } from "./executivo.mjs";
 import { rotuloMes, r2, lancamentos, resumoMensal, porCategoria, porFornecedor, parcelas, indicadores, alertas } from "./analise.mjs";
 
 const $ = (s) => document.querySelector(s);
@@ -19,9 +20,10 @@ const S = { base: {}, locais: {}, todos: [], meses: [], sev: new Set(["alta", "m
 async function carregarBase() {
   try {
     const r = await fetch("data/balancetes.json", { cache: "no-store" });
+    if (!r.ok) throw new Error(r.status);
     const j = await r.json();
     S.base = j.meses || {};
-  } catch { S.base = {}; }
+  } catch { S.base = (window.__BASE_BALANCETES__ && window.__BASE_BALANCETES__.meses) || {}; }
   S.locais = ls.get(LS_MESES, {});
   juntar();
 }
@@ -64,53 +66,92 @@ function render() {
     for (const id of ["#kpis", "#grafMensal", "#leitura", "#miniCats", "#tabMensal"]) $(id).innerHTML = "";
     $("#kpis").innerHTML = `<div class="vazio card">Nenhum balancete carregado. Importe os PDFs na aba <a href="#dados">Importar PDF</a>.</div>`;
   } else {
-    painel(); categorias(); fornecedores(); listaAlertas(); tabParcelas(); notas(); conselho();
+    painel(); renderExecutivo(S.meses, $("#secAnalises")); categorias(); fornecedores(); listaAlertas(); tabParcelas(); notas(); conselho();
   }
   lancTab(); dadosTab();
 }
 
 // ---------------------------------------------------------------- painel
+function spark(vals, cor, zero = false) {
+  if (vals.length < 2) return "";
+  const W = 200, H = 34, lo = Math.min(...vals, zero ? 0 : Infinity), hi = Math.max(...vals, zero ? 0 : -Infinity), sp = hi - lo || 1;
+  const xy = vals.map((v, i) => [(i / (vals.length - 1)) * (W - 6) + 3, H - 4 - ((v - lo) / sp) * (H - 8)]);
+  const z = H - 4 - ((0 - lo) / sp) * (H - 8);
+  const area = `M${xy[0][0]},${H} L${xy.map((p) => p.join(",")).join(" L")} L${xy.at(-1)[0]},${H} Z`;
+  return `<svg class="spark" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" aria-hidden="true">
+    ${zero && lo < 0 ? `<line x1="0" x2="${W}" y1="${z}" y2="${z}" stroke="var(--line-2)" stroke-dasharray="3 3"/>` : ""}
+    <path d="${area}" fill="${cor}" opacity=".12"/><polyline points="${xy.map((p) => p.join(",")).join(" ")}" fill="none" stroke="${cor}" stroke-width="2" vector-effect="non-scaling-stroke"/>
+    <circle cx="${xy.at(-1)[0]}" cy="${xy.at(-1)[1]}" r="3" fill="${cor}"/></svg>`;
+}
+function situacao(ind) {
+  const rm = ind.rm, ult3 = rm.slice(-3);
+  const negRecente = ult3.some((m) => m.saldo < 0);
+  const res3 = ult3.reduce((s, m) => s + m.resultado, 0);
+  const altas = S.alertas.filter((a) => a.sev === "alta").length;
+  const ult = rm.at(-1);
+  const folgaMes = ult.saldo / (ult3.reduce((s, m) => s + m.despesa, 0) / ult3.length || 1);
+  if (negRecente || ult.saldo < 0) return { cls: "critico", rotulo: "Crítica", titulo: "Caixa no limite",
+    texto: `O saldo ficou negativo nos últimos meses e o condomínio depende do limite bancário. Há ${altas} ponto(s) de prioridade alta para esclarecer com a administradora.` };
+  if (res3 < 0 || folgaMes < 0.25 || altas) return { cls: "atencao", rotulo: "Atenção", titulo: res3 < 0 ? "Despesas acima da arrecadação" : "Caixa positivo, mas sem reserva",
+    texto: `Saldo de ${brl(ult.saldo)} em ${rotuloMes(ult.mes)}, equivalente a ${(folgaMes * 30).toFixed(0)} dias de despesa média. ${altas ? `${altas} ponto(s) de prioridade alta precisam de resposta da administradora.` : ""}` };
+  return { cls: "estavel", rotulo: "Estável", titulo: "Contas equilibradas", texto: `Resultado positivo nos últimos três meses e saldo de ${brl(ult.saldo)} em ${rotuloMes(ult.mes)}.` };
+}
 function painel() {
   const ind = indicadores(S.meses);
   S.ind = ind;
-  const ult = ind.rm.at(-1);
-  const k = [
-    ["Receitas no período", brl(ind.receita), `${ind.rm.length} meses · média ${brl(ind.receita / ind.rm.length)}`],
-    ["Despesas no período", brl(ind.despesa), `${pct(ind.receita ? ind.despesa / ind.receita : 0)} da receita`],
-    ["Resultado", brl(ind.resultado), ind.resultado < 0 ? "gastou mais do que arrecadou" : "sobra no período", ind.resultado < 0 ? "neg" : "pos"],
-    [`Saldo em ${rotuloMes(ult.mes)}`, brl(ind.saldoFinal), `variação no período ${brl(ind.saldoFinal - (S.meses[0].totais.saldoAnterior ?? 0))}`, ind.saldoFinal < 0 ? "neg" : ""],
-    ["Menor saldo", brl(ind.menor.saldo), `no fim de ${rotuloMes(ind.menor.mes)}`, ind.menor.saldo < 0 ? "neg" : ""],
-    ["Juros, IOF e multas", brl(ind.fin.total), "custo de atraso e de saldo negativo", ind.fin.total > 0 ? "neg" : ""],
-    ["Parcelas a vencer", brl(ind.compromissos), "compras já parceladas", ""],
-  ];
-  $("#kpis").innerHTML = k.map(([t, v, d, c]) => `<div class="kpi ${c || ""}"><span class="eyebrow">${t}</span><b>${v}</b><span class="det">${d}</span></div>`).join("");
-  $("#grafMensal").innerHTML = graficoMensal(ind.rm);
+  const rm = ind.rm, ult = rm.at(-1);
+  const st = situacao(ind);
+  $("#statusCard").className = `card status ${st.cls}`;
+  $("#statusPill").className = `pill ${st.cls}`; $("#statusPill").textContent = st.rotulo;
+  $("#statusTitulo").textContent = st.titulo;
+  $("#statusTexto").textContent = st.texto;
+  const ult3 = rm.slice(-3);
+  const med3r = ult3.reduce((s, m) => s + m.receita, 0) / ult3.length, med3d = ult3.reduce((s, m) => s + m.despesa, 0) / ult3.length;
+  $("#statusFatos").innerHTML = [
+    ["Saldo em " + rotuloMes(ult.mes), brl(ult.saldo), ult.saldo < 0],
+    ["Menor saldo do período", `${brl(ind.menor.saldo)} (${rotuloMes(ind.menor.mes)})`, ind.menor.saldo < 0],
+    ["Média dos 3 últimos meses", `${brl(med3r - med3d)}/mês`, med3r - med3d < 0],
+    ["Meses com déficit", `${rm.filter((m) => m.resultado < 0).length} de ${rm.length}`, false],
+  ].map(([t, v, neg]) => `<li><span class="muted">${t}</span><b style="${neg ? "color:var(--crit)" : ""}">${v}</b></li>`).join("");
 
-  // leitura automática
+  const kp = [
+    ["Receita acumulada", brl(ind.receita), `${rm.length} meses · média ${brl(ind.receita / rm.length)}/mês`, "", spark(rm.map((m) => m.receita), "var(--accent)")],
+    ["Despesa acumulada", brl(ind.despesa), `${pct(ind.receita ? ind.despesa / ind.receita : 0)} da receita`, "", spark(rm.map((m) => m.despesa), "var(--desp)")],
+    ["Resultado do período", brl(ind.resultado), ind.resultado < 0 ? "gastou mais do que arrecadou" : "sobra acumulada", ind.resultado < 0 ? "neg" : "pos", spark(rm.map((m) => m.resultado), ind.resultado < 0 ? "var(--crit)" : "var(--ok)", true)],
+    [`Saldo de caixa · ${rotuloMes(ult.mes)}`, brl(ind.saldoFinal), `início do período: ${brl(S.meses[0].totais.saldoAnterior ?? 0)}`, ind.saldoFinal < 0 ? "neg" : "", spark(rm.map((m) => m.saldo), "var(--gold)", true)],
+  ];
+  $("#kpis").innerHTML = kp.map(([t, v, d, c, g]) => `<div class="kpi ${c}"><span class="eyebrow">${t}</span><b>${v}</b><span class="det">${d}</span>${g}</div>`).join("");
+  const k2 = [
+    ["Juros, IOF e multas", brl(ind.fin.total), "custo de atraso e saldo negativo", ind.fin.total > 0 ? "neg" : ""],
+    ["Parcelas a vencer", brl(ind.compromissos), "compras já parceladas", ""],
+    ["Pessoal / receita", pct(ind.pessoalPct), "folha, RH terceirizado e tributos", ""],
+    ["Alertas de prioridade alta", String(S.alertas.filter((a) => a.sev === "alta").length), `${S.alertas.filter((a) => a.sev === "media").length} de prioridade média`, S.alertas.some((a) => a.sev === "alta") ? "neg" : "pos"],
+  ];
+  $("#kpis2").innerHTML = k2.map(([t, v, d, c]) => `<div class="kpi ${c}"><span class="eyebrow">${t}</span><b>${v}</b><span class="det">${d}</span></div>`).join("");
+  $("#grafMensal").innerHTML = graficoMensal(rm);
+
   const L = [];
-  const def = ind.rm.filter((m) => m.resultado < 0);
-  L.push([def.length > ind.rm.length / 3 ? "alta" : "", `Despesa maior que a receita em ${def.length} de ${ind.rm.length} meses.`]);
-  const neg = ind.rm.filter((m) => m.saldo < 0);
+  const def = rm.filter((m) => m.resultado < 0);
+  L.push([def.length > rm.length / 3 ? "alta" : "", `Despesa maior que a receita em <b>${def.length} de ${rm.length}</b> meses.`]);
+  const neg = rm.filter((m) => m.saldo < 0);
   if (neg.length) L.push(["alta", `Saldo negativo em ${neg.map((m) => rotuloMes(m.mes)).join(", ")}.`]);
   else L.push(["ok", "Nenhum mês fechou com saldo negativo."]);
-  const ult3 = ind.rm.slice(-3);
-  if (ult3.length === 3) {
-    const r = ult3.reduce((s, x) => s + x.receita, 0) / 3, d = ult3.reduce((s, x) => s + x.despesa, 0) / 3;
-    L.push([d > r ? "media" : "ok", `Últimos 3 meses: receita média ${brl(r)} e despesa média ${brl(d)} (folga de ${brl(r - d)}/mês).`]);
-  }
+  if (ult3.length === 3) L.push([med3d > med3r ? "media" : "ok", `Últimos 3 meses: receita média de ${brl(med3r)} e despesa média de ${brl(med3d)}.`]);
   const topCat = ind.cats[0];
-  if (topCat) L.push(["", `${topCat.cat} é a maior despesa: ${brl(topCat.total)} (${pct(topCat.total / ind.despesa)}).`]);
-  const pes = ind.cats.find((c) => /pessoal/i.test(c.cat));
-  if (pes) L.push([ind.pessoalPct > 0.5 ? "media" : "", `Pessoal consome ${pct(ind.pessoalPct)} da receita.`]);
-  const altas = S.alertas.filter((a) => a.sev === "alta").length, medias = S.alertas.filter((a) => a.sev === "media").length;
-  L.push([altas ? "alta" : "ok", `${altas} alerta(s) de prioridade alta e ${medias} de média. <a href="#alertas">Ver alertas</a>`]);
-  if (ind.fin.total) L.push(["media", `Juros, IOF e multas somam ${brl(ind.fin.total)} no período.`]);
+  if (topCat) L.push(["", `${topCat.cat} é a maior despesa: ${brl(topCat.total)} (${pct(topCat.total / ind.despesa)} do total).`]);
+  const topF = porFornecedor(S.meses)[0];
+  if (topF) L.push(["", `Maior fornecedor: ${esc(topF.forn)}, com ${brl(topF.total)} (${pct(topF.total / ind.despesa)}).`]);
+  if (ind.fin.total) L.push(["media", `Juros, IOF e multas por atraso somam ${brl(ind.fin.total)}.`]);
   $("#leitura").innerHTML = L.map(([c, t]) => `<li class="${c}"><span>${t}</span></li>`).join("");
 
-  const max = ind.cats[0]?.total || 1;
-  $("#miniCats").innerHTML = `<table><tbody>${ind.cats.map((c) => `<tr><td>${esc(c.cat)}</td><td style="width:38%"><div class="barra"><span style="width:${(c.total / max) * 100}%"></span></div></td><td class="n">${brl(c.total)}</td><td class="n mini">${pct(c.total / ind.despesa)}</td></tr>`).join("")}</tbody></table>`;
+  const top = S.alertas.filter((a) => a.sev === "alta").slice(0, 6);
+  $("#topAlertas").innerHTML = top.length ? top.map((a) => `<a href="#alertas"><span class="pill alta">${esc(a.tipo)}</span><span class="t">${esc(a.titulo)}</span></a>`).join("")
+    : `<p class="muted small">Nenhum alerta de prioridade alta no período.</p>`;
 
-  const linhas = ind.rm.map((m) => `<tr><td>${rotuloMes(m.mes)}${S.meses.find((b) => b.mes === m.mes).origem === "local" ? ' <span class="pill local">não publicado</span>' : ""}</td>
+  const max = ind.cats[0]?.total || 1;
+  $("#miniCats").innerHTML = `<table><thead><tr><th>Categoria</th><th style="width:40%"></th><th class="n">Valor</th><th class="n">Participação</th></tr></thead><tbody>${ind.cats.map((c) => `<tr><td>${esc(c.cat)}</td><td><div class="barra"><span style="width:${(c.total / max) * 100}%"></span></div></td><td class="n">${brl(c.total)}</td><td class="n mini">${pct(c.total / ind.despesa)}</td></tr>`).join("")}</tbody></table>`;
+
+  const linhas = rm.map((m) => `<tr><td>${rotuloMes(m.mes)}${S.meses.find((b) => b.mes === m.mes).origem === "local" ? ' <span class="pill local">não publicado</span>' : ""}</td>
     <td class="n">${brl(m.receita)}</td><td class="n">${brl(m.despesa)}</td><td class="n ${m.resultado < 0 ? "neg" : ""}">${brl(m.resultado)}</td>
     <td class="n ${m.saldo < 0 ? "neg" : ""}">${brl(m.saldo)}</td><td class="n">${pct(m.receita ? m.despesa / m.receita : 0)}</td></tr>`).join("");
   $("#tabMensal").innerHTML = `<thead><tr><th>Mês</th><th class="n">Receita</th><th class="n">Despesa</th><th class="n">Resultado</th><th class="n">Saldo final</th><th class="n">Despesa/receita</th></tr></thead>
@@ -128,23 +169,31 @@ function escalaBonita(min, max, n = 5) {
 const curto = (v) => Math.abs(v) >= 1000 ? (v / 1000).toLocaleString("pt-BR", { maximumFractionDigits: 0 }) + " mil" : v.toLocaleString("pt-BR");
 
 function graficoMensal(rm) {
-  const W = 760, H = 290, ml = 64, mr = 14, mt = 14, mb = 34;
+  const W = 760, H = 300, ml = 62, mr = 16, mt = 22, mb = 34;
   const vals = rm.flatMap((m) => [m.receita, m.despesa, m.saldo, 0]);
   const { lo, hi, ticks } = escalaBonita(Math.min(...vals), Math.max(...vals));
   const y = (v) => mt + (H - mt - mb) * (1 - (v - lo) / (hi - lo));
-  const bw = (W - ml - mr) / rm.length, gap = Math.max(2, bw * 0.16), b = (bw - gap * 2) / 2;
+  const bw = (W - ml - mr) / rm.length, gap = Math.max(3, bw * 0.2), b = (bw - gap * 2) / 2;
   let g = "";
-  for (const t of ticks) g += `<line x1="${ml}" x2="${W - mr}" y1="${y(t)}" y2="${y(t)}" stroke="var(--line)" stroke-width="${t === 0 ? 1.4 : 1}"/><text x="${ml - 8}" y="${y(t) + 4}" text-anchor="end">${curto(t)}</text>`;
+  if (lo < 0) g += `<rect x="${ml}" y="${y(0)}" width="${W - ml - mr}" height="${y(lo) - y(0)}" fill="var(--crit-soft)" opacity=".7"/>`;
+  for (const t of ticks) g += `<line x1="${ml}" x2="${W - mr}" y1="${y(t)}" y2="${y(t)}" stroke="${t === 0 ? "var(--line-2)" : "var(--line)"}" stroke-width="1"/><text x="${ml - 8}" y="${y(t) + 4}" text-anchor="end">${curto(t)}</text>`;
   rm.forEach((m, i) => {
     const x0 = ml + i * bw + gap;
-    g += `<rect x="${x0}" y="${Math.min(y(m.receita), y(0))}" width="${b}" height="${Math.abs(y(0) - y(m.receita))}" fill="var(--accent)" rx="2"><title>${rotuloMes(m.mes)} · receita ${brl(m.receita)}</title></rect>`;
-    g += `<rect x="${x0 + b}" y="${Math.min(y(m.despesa), y(0))}" width="${b}" height="${Math.abs(y(0) - y(m.despesa))}" fill="var(--muted)" opacity=".55" rx="2"><title>${rotuloMes(m.mes)} · despesa ${brl(m.despesa)}</title></rect>`;
+    g += `<rect x="${x0}" y="${Math.min(y(m.receita), y(0))}" width="${b - 1}" height="${Math.abs(y(0) - y(m.receita))}" fill="var(--accent)" data-tip="${rotuloMes(m.mes)} · receita ${brl(m.receita)}"/>`;
+    g += `<rect x="${x0 + b}" y="${Math.min(y(m.despesa), y(0))}" width="${b - 1}" height="${Math.abs(y(0) - y(m.despesa))}" fill="var(--desp)" data-tip="${rotuloMes(m.mes)} · despesa ${brl(m.despesa)}"/>`;
     const lab = rm.length > 16 && i % 2 ? "" : rotuloMes(m.mes).replace("/20", "/");
-    g += `<text x="${x0 + b}" y="${H - mb + 16}" text-anchor="middle">${lab}</text>`;
+    g += `<text x="${x0 + b}" y="${H - mb + 18}" text-anchor="middle">${lab}</text>`;
   });
   const pts = rm.map((m, i) => [ml + i * bw + bw / 2, y(m.saldo)]);
-  g += `<polyline points="${pts.map((p) => p.join(",")).join(" ")}" fill="none" stroke="var(--beam)" stroke-width="2.5" stroke-linejoin="round"/>`;
-  pts.forEach((p, i) => g += `<circle cx="${p[0]}" cy="${p[1]}" r="${i === pts.length - 1 ? 5 : 3.2}" fill="${rm[i].saldo < 0 ? "var(--crit)" : "var(--beam)"}" stroke="var(--surface)" stroke-width="1.5"><title>${rotuloMes(rm[i].mes)} · saldo ${brl(rm[i].saldo)}</title></circle>`);
+  g += `<polyline points="${pts.map((p) => p.join(",")).join(" ")}" fill="none" stroke="var(--gold)" stroke-width="2.5" stroke-linejoin="round"/>`;
+  pts.forEach((p, i) => g += `<circle cx="${p[0]}" cy="${p[1]}" r="${i === pts.length - 1 ? 5 : 3.2}" fill="${rm[i].saldo < 0 ? "var(--crit)" : "var(--gold)"}" stroke="var(--surface)" stroke-width="1.5" data-tip="${rotuloMes(rm[i].mes)} · saldo ${brl(rm[i].saldo)}"/>`);
+  // anotações: menor saldo e saldo atual
+  const iMin = rm.reduce((a, m, i) => (m.saldo < rm[a].saldo ? i : a), 0), iUlt = rm.length - 1;
+  const anot = (i, txt, acima) => {
+    const [x, yy] = pts[i], anc = x > W - 120 ? "end" : x < ml + 60 ? "start" : "middle";
+    return `<text class="anot" x="${x}" y="${acima ? yy - 10 : yy + 18}" text-anchor="${anc}">${txt}</text>`;
+  };
+  if (rm[iMin].saldo < 0 && iMin !== iUlt) g += anot(iMin, `mínimo ${curto(Math.round(rm[iMin].saldo))}`, false);
   return `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Receitas, despesas e saldo por mês">${g}</svg>`;
 }
 
@@ -191,6 +240,7 @@ const SEV = { alta: "Alta", media: "Média", baixa: "Baixa", info: "Informativo"
 function listaAlertas() {
   const A = S.alertas;
   $("#filtroSev").innerHTML = Object.entries(SEV).map(([k, t]) => `<button type="button" class="chip" data-sev="${k}" aria-pressed="${S.sev.has(k)}">${t} · ${A.filter((a) => a.sev === k).length}</button>`).join("");
+  $("#sevbar").innerHTML = A.length ? Object.keys(SEV).map((k) => { const n = A.filter((a) => a.sev === k).length; return n ? `<span class="${k}" style="width:${(n / A.length) * 100}%" title="${SEV[k]}: ${n}"></span>` : ""; }).join("") : "";
   const vis = A.filter((a) => S.sev.has(a.sev));
   $("#listaAlertas").innerHTML = vis.length ? vis.map((a, i) => `<article class="alerta ${a.sev}">
     <div class="linha1"><span class="pill ${a.sev}">${SEV[a.sev]}</span><span class="eyebrow">${esc(a.tipo)}</span>${a.mes ? `<span class="mini">${rotuloMes(a.mes)}</span>` : ""}</div>
@@ -312,13 +362,15 @@ Conselheiro(a)                                    Conselheiro(a)                
 let pdfjs = null;
 async function carregarPdfjs() {
   if (pdfjs) return pdfjs;
-  pdfjs = await import("./vendor/pdf.min.mjs");
-  pdfjs.GlobalWorkerOptions.workerSrc = new URL("./vendor/pdf.worker.min.mjs", import.meta.url).href;
+  if (location.protocol === "file:") throw new Error("Para importar PDF, abra o site publicado (GitHub Pages). Aberto direto do computador, o navegador bloqueia o leitor de PDF.");
+  pdfjs = await import(new URL("js/vendor/pdf.min.mjs", document.baseURI).href);
+  pdfjs.GlobalWorkerOptions.workerSrc = new URL("js/vendor/pdf.worker.min.mjs", document.baseURI).href;
   return pdfjs;
 }
 async function importar(files) {
   const log = $("#log");
-  const lib = await carregarPdfjs();
+  let lib;
+  try { lib = await carregarPdfjs(); } catch (e) { const d = document.createElement("div"); d.className = "erro"; d.textContent = e.message; log.prepend(d); return; }
   for (const f of files) {
     const linha = document.createElement("div"); linha.textContent = `Lendo ${f.name}…`; log.prepend(linha);
     try {
@@ -341,6 +393,8 @@ async function importar(files) {
 
 function dadosTab() {
   const nl = Object.keys(S.locais).length;
+  const ultB = S.todos.at(-1);
+  $("#rodapeBase").textContent = ultB ? `Último balancete: ${rotuloMes(ultB.mes)}, emitido em ${ultB.emissao}.` : "";
   $("#resumoBase").textContent = `${S.todos.length} meses · ${Object.keys(S.base).length} publicados · ${nl} só neste navegador`;
   $("#tabMeses").innerHTML = `<thead><tr><th>Mês</th><th>Emissão</th><th>Arquivo</th><th class="n">Receitas</th><th class="n">Despesas</th><th class="n">Saldo</th><th>Conferência</th><th>Origem</th><th></th></tr></thead><tbody>${
     [...S.todos].reverse().map((b) => {
@@ -385,7 +439,7 @@ async function publicar() {
 }
 
 // ---------------------------------------------------------------- navegação e eventos
-const ABAS = ["painel", "categorias", "fornecedores", "alertas", "parcelas", "lancamentos", "notas", "conselho", "dados"];
+const ABAS = ["painel", "analises", "categorias", "fornecedores", "alertas", "parcelas", "lancamentos", "notas", "conselho", "dados"];
 function rota() {
   const a = ABAS.includes(location.hash.slice(1)) ? location.hash.slice(1) : "painel";
   document.querySelectorAll("section[data-aba]").forEach((s) => (s.hidden = s.dataset.aba !== a));
@@ -432,6 +486,17 @@ $("#copiarMinuta").addEventListener("click", async () => {
   try { await navigator.clipboard.writeText($("#minuta").innerText); toast("Texto copiado."); }
   catch { const r = document.createRange(); r.selectNodeContents($("#minuta")); const s = getSelection(); s.removeAllRanges(); s.addRange(r); toast("Selecionado. Use Ctrl+C para copiar."); }
 });
+
+const tip = $("#tip");
+document.addEventListener("mousemove", (e) => {
+  const t = e.target.closest && e.target.closest("[data-tip]");
+  if (!t) { tip.hidden = true; return; }
+  tip.textContent = t.getAttribute("data-tip"); tip.hidden = false;
+  const w = tip.offsetWidth, h = tip.offsetHeight;
+  tip.style.left = Math.min(innerWidth - w - 12, e.clientX + 14) + "px";
+  tip.style.top = (e.clientY - h - 12 < 8 ? e.clientY + 18 : e.clientY - h - 12) + "px";
+});
+if (window.self === window.top) { $("#btnImprimir").hidden = false; $("#btnImprimir").addEventListener("click", () => window.print()); }
 
 rota();
 await carregarBase();

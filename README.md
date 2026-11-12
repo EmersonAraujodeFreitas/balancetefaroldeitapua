@@ -26,6 +26,9 @@ Settings → Pages → *Deploy from a branch* → `main` / `(root)`.
 - `js/parser.mjs` – leitor do PDF da Logo
 - `js/analise.mjs` – indicadores e regras de alerta
 - `js/app.mjs` – telas, importação e publicação
+- `js/executivo.mjs` – análises executivas e gráficos comparativos
+- `js/app.js` e `js/base.js` – gerados por `python3 build.py` a partir dos `.mjs` (o site carrega estes dois, por isso também abre direto do computador)
+- `img/` – logo do condomínio
 - `js/vendor/` – PDF.js 6.2.108 (Apache-2.0)
 - `data/balancetes.json` – base publicada (ago/2025 a set/2026 já carregados)
 - `frontend/`, `backend/` – protótipo anterior, mantido sem alterações
