@@ -48,7 +48,7 @@ const ALIASES = [
   [/EMBASA/i, "Embasa (água)"],
   [/SICOOB/i, "Sicoob (banco)"],
   [/BRADESCO/i, "Bradesco (banco)"],
-  [/DUOS SINDICOS/i, "Duos Síndicos 360"],
+  [/DUOS? SINDICOS?/i, "Duos Síndicos 360"],
   [/DIEGO CONCEI/i, "Diego Conceição Pereira (síndico)"],
   [/ANDRADE E MUNIZ/i, "Andrade e Muniz Comércio"],
   [/NIL MATERIAIS/i, "Nil Materiais de Construção"],
@@ -91,6 +91,12 @@ const MINUSC = new Set(["de","da","do","das","dos","e","em","para","com"]);
 export function titulo(t) {
   if (t !== t.toUpperCase()) return t;
   return t.toLowerCase().split(/\s+/).map((w, i) => (i && MINUSC.has(w)) ? w : w.charAt(0).toUpperCase() + w.slice(1)).join(" ");
+}
+
+// fornecedor citado em um texto livre (ex.: notas explicativas)
+export function identificarFornecedor(texto) {
+  const a = ALIASES.find(([re]) => re.test(texto));
+  return a ? a[1] : null;
 }
 
 export function separarFornecedor(desc, categoria) {

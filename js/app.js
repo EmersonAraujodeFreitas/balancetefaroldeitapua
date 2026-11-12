@@ -52,7 +52,7 @@ const ALIASES = [
   [/EMBASA/i, "Embasa (água)"],
   [/SICOOB/i, "Sicoob (banco)"],
   [/BRADESCO/i, "Bradesco (banco)"],
-  [/DUOS SINDICOS/i, "Duos Síndicos 360"],
+  [/DUOS? SINDICOS?/i, "Duos Síndicos 360"],
   [/DIEGO CONCEI/i, "Diego Conceição Pereira (síndico)"],
   [/ANDRADE E MUNIZ/i, "Andrade e Muniz Comércio"],
   [/NIL MATERIAIS/i, "Nil Materiais de Construção"],
@@ -95,6 +95,12 @@ const MINUSC = new Set(["de","da","do","das","dos","e","em","para","com"]);
 function titulo(t) {
   if (t !== t.toUpperCase()) return t;
   return t.toLowerCase().split(/\s+/).map((w, i) => (i && MINUSC.has(w)) ? w : w.charAt(0).toUpperCase() + w.slice(1)).join(" ");
+}
+
+// fornecedor citado em um texto livre (ex.: notas explicativas)
+function identificarFornecedor(texto) {
+  const a = ALIASES.find(([re]) => re.test(texto));
+  return a ? a[1] : null;
 }
 
 function separarFornecedor(desc, categoria) {
@@ -273,6 +279,7 @@ function conferir(b) {
 }
 
 // ===== analise.mjs
+
 // Motor de análise: tudo é derivado dos meses carregados, sem regras presas a um período.
 // Um mês, categoria ou fornecedor novo entra automaticamente em todos os cálculos e alertas.
 
@@ -322,8 +329,10 @@ function porFornecedor(meses) {
   return [...m.values()].sort((a, b) => b.total - a.total);
 }
 
-// Séries de parcelas ("Parcela 03/10"). A administradora às vezes troca a NF ou a descrição
-// entre parcelas, então a série é reconhecida por fornecedor + item + nº total + valor da parcela.
+// Séries de parcelas ("Parcela 03/10"). A administradora às vezes troca a NF, o fornecedor ou a
+// descrição entre parcelas; a série é reconhecida por fornecedor + nº total + valor e, depois,
+// séries com a mesma NF e o mesmo valor são unidas (ex.: "Nil 01/05" que segue como "Frigelar 02/08").
+const nfChave = (nf) => (NF_GENERICA.test(nf || "") ? "" : String(nf).split("/").pop());
 function parcelas(meses) {
   if (!meses.length) return [];
   const ordem = meses.map((b) => b.mes);
@@ -332,12 +341,25 @@ function parcelas(meses) {
     const p = d.desc.match(PARC); if (!p) continue;
     const chave = `${d.forn}|${p[2]}|${Math.round(d.v)}`;
     const s = series.get(chave) || { grupo: `${d.forn}|${d.item}|${p[2]}`, forn: d.forn, item: d.item, nf: d.nf,
-      desc: d.det.replace(PARC, "").replace(/^[\s\-–.]+/, "") || d.item, de: +p[2], pagamentos: [] };
+      desc: d.det.replace(PARC, "").replace(/^[\s\-–.]+/, "") || d.item, de: +p[2], pagamentos: [], fornecedores: new Set(), totais: new Set() };
     s.pagamentos.push({ mes: d.mes, n: +p[1], v: d.v, id: d.id, nf: d.nf });
+    s.fornecedores.add(d.forn); s.totais.add(+p[2]);
     series.set(chave, s);
   }
-  const lista = [...series.values()];
-  // continuação do mesmo item com outro valor (ex.: parcela 01 de um valor e 02–04 de outro)
+  // une séries com a mesma NF e mesmo valor quando as parcelas não se repetem
+  let lista = [...series.values()];
+  for (let i = 0; i < lista.length; i++) for (let j = i + 1; j < lista.length; j++) {
+    const a = lista[i], b = lista[j]; if (!a || !b) continue;
+    const ka = nfChave(a.nf), kb = nfChave(b.nf);
+    if (!ka || ka !== kb || Math.round(a.pagamentos[0].v) !== Math.round(b.pagamentos[0].v)) continue;
+    const na = new Set(a.pagamentos.map((p) => p.n));
+    if (b.pagamentos.some((p) => na.has(p.n))) continue;
+    const [velha, nova] = a.pagamentos.at(-1).mes <= b.pagamentos.at(-1).mes ? [a, b] : [b, a];
+    nova.pagamentos.push(...velha.pagamentos); velha.fornecedores.forEach((f) => nova.fornecedores.add(f)); velha.totais.forEach((t) => nova.totais.add(t));
+    nova.de = Math.max(nova.de, velha.de);
+    lista[lista.indexOf(velha)] = null;
+  }
+  lista = lista.filter(Boolean);
   const continuacoes = {};
   for (const s of lista) {
     const ini = s.pagamentos.reduce((a, b) => (b.mes < a.mes ? b : a));
@@ -356,29 +378,33 @@ function parcelas(meses) {
       lista.some((o) => o !== s && o.grupo === s.grupo && Math.max(...o.pagamentos.map((p) => p.n)) > maxN);
     const mesesSemPagar = ordem.length - 1 - ordem.indexOf(ult.mes);
     const vigente = restantes > 0 && !substituida;
-    return { ...s, ultimaParcela: maxN, restantes, valorParcela: ult.v, ultimoMes: ult.mes, repetidas, substituida,
+    return { ...s, fornecedores: [...s.fornecedores], totais: [...s.totais], ultimaParcela: maxN, restantes, valorParcela: ult.v, ultimoMes: ult.mes, repetidas, substituida,
       aPagar: vigente ? r2(restantes * ult.v) : 0,
       interrompida: vigente && mesesSemPagar >= 2, ativa: vigente && ult.mes === ultimoMes };
   }).sort((a, b) => b.aPagar - a.aPagar);
 }
 
+const num = (s) => +s.replace(/\./g, "").replace(",", ".");
 function custosFinanceiros(meses) {
-  const juros = [], iof = [], jurosCartao = [];
-  for (const b of meses) for (const d of b.despesas) {
-    if (/^JUROS/i.test(d.desc)) (/Cart/i.test(d.tipo) ? jurosCartao : juros).push({ ...d, mes: b.mes });
-    else if (/^IOF/i.test(d.desc)) iof.push({ ...d, mes: b.mes });
+  const juros = [], iof = [], iofAplic = [], jurosCartao = [];
+  for (const b of meses) {
+    const temJuros = b.despesas.some((d) => /^JUROS/i.test(d.desc));
+    for (const d of b.despesas) {
+      if (/^JUROS/i.test(d.desc)) (/Cart/i.test(d.tipo) ? jurosCartao : juros).push({ ...d, mes: b.mes });
+      // IOF num mês sem juros vem do resgate de aplicação, não de saldo negativo
+      else if (/^IOF/i.test(d.desc)) (temJuros ? iof : iofAplic).push({ ...d, mes: b.mes });
+    }
   }
-  const multas = [];
+  const multas = [], futuras = [];
   for (const b of meses) for (const n of b.notas || []) {
+    if (/virão em faturas posteriores|virao em faturas posteriores/i.test(n.texto)) futuras.push({ mes: b.mes, texto: n.texto });
     if (!/juros|multa|encargo|acr[ée]scimo/i.test(n.texto)) continue;
-    const vals = [...n.texto.matchAll(/R\$\s*([\d.]+,\d{2})/g)].map((m) => +m[1].replace(/\./g, "").replace(",", "."));
-    // usa o valor dos encargos (o menor citado, já que a nota às vezes cita também o valor do boleto)
-    const enc = n.texto.match(/(?:encargos?|acr[ée]scimo|juros\/multa)[^R]*R\$\s*([\d.]+,\d{2})/i);
-    const v = enc ? +enc[1].replace(/\./g, "").replace(",", ".") : (vals.length ? Math.min(...vals) : 0);
-    if (v > 0) multas.push({ mes: b.mes, v, texto: n.texto });
+    const enc = n.texto.match(/(?:[Ee]ncargos?|[Aa]cr[ée]scimo|juros\/multa)[^R]*R\$\s*([\d.]+,\d{2})/) || n.texto.match(/R\$\s*([\d.]+,\d{2})\s*referente a (?:encargos|juros)/);
+    if (enc) multas.push({ mes: b.mes, v: num(enc[1]), texto: n.texto, terceiro: /responsabilidade d[ae] (tenda|construtora)/i.test(n.texto) });
   }
-  return { juros, iof, jurosCartao, multas,
-    total: r2(soma(juros, (x) => x.v) + soma(iof, (x) => x.v) + soma(jurosCartao, (x) => x.v) + soma(multas, (x) => x.v)) };
+  const proprio = multas.filter((m) => !m.terceiro);
+  return { juros, iof, iofAplic, jurosCartao, multas, futuras,
+    total: r2(soma(juros, (x) => x.v) + soma(iof, (x) => x.v) + soma(jurosCartao, (x) => x.v) + soma(proprio, (x) => x.v)) };
 }
 
 function indicadores(meses) {
@@ -396,29 +422,36 @@ function indicadores(meses) {
 
 // ------------------------------------------------------------------ alertas
 const fmt = (v) => v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+const mesDe = (dataBR) => { const m = /(\d{2})\/(\d{2})\/(\d{4})/.exec(dataBR || ""); return m ? `${m[3]}-${m[2]}` : null; };
+const refChave = (ref) => { const m = /(\d{2})\/(\d{4})/.exec(ref || ""); return m ? `${m[2]}-${m[1]}` : null; };
+const kwh = (desc) => { const m = /Consumo Ativo de\s*([\d.,]+)\s*kWh/i.exec(desc); return m ? Math.round(num(m[1].includes(",") ? m[1] : m[1] + ",00")) : null; };
+const mesesEntre = (a, b) => { const [ya, ma] = a.split("-").map(Number), [yb, mb] = b.split("-").map(Number); return (yb - ya) * 12 + (mb - ma) + 1; };
 
 function alertas(meses) {
   const A = [];
-  const add = (sev, tipo, titulo, detalhe, pergunta, ids = [], mes = null) => A.push({ sev, tipo, titulo, detalhe, pergunta, ids, mes });
+  const add = (sev, tipo, titulo, detalhe, pergunta, ids = [], mes = null, forn = null) => { const a = { sev, tipo, titulo, detalhe, pergunta, ids, mes, forn }; A.push(a); return a; };
   if (!meses.length) return A;
   const ordem = meses.map((b) => b.mes);
   const L = lancamentos(meses);
   const ult = ordem[ordem.length - 1];
+  const reembolsos = meses.flatMap((b) => b.receitas.filter((r) => /REEMBOLSO/i.test(r.desc)).map((r) => ({ mes: b.mes, v: r.v })));
+  const foiReembolsado = (d) => reembolsos.some((r) => Math.abs(r.v - d.v) < 0.01 && r.mes >= d.mes && mesesEntre(d.mes, r.mes) <= 2);
 
-  // 1. saldo negativo / déficit
+  // 1. caixa
   const neg = meses.filter((b) => b.totais.saldoAtual < 0);
   if (neg.length) add("alta", "Liquidez", `Saldo negativo em ${neg.length} ${neg.length > 1 ? "meses" : "mês"}`,
-    `Fechamentos negativos: ${neg.map((b) => `${rotuloMes(b.mes)} (${fmt(b.totais.saldoAtual)})`).join("; ")}. Saldo negativo gera juros e IOF de cheque especial e atraso de fornecedores.`,
+    `Fechamentos negativos: ${neg.map((b) => `${rotuloMes(b.mes)} (${fmt(b.totais.saldoAtual)})`).join("; ")}. Com saldo negativo o banco cobra juros e IOF e as contas passam a ser pagas com atraso.`,
     "Qual o plano para recompor o caixa e evitar uso do limite da conta?", [], neg[neg.length - 1].mes);
   const def = meses.filter((b) => b.totais.despesas > b.totais.receitas * 1.0001);
   if (def.length) add(def.length >= 3 ? "alta" : "media", "Liquidez", `Despesa maior que a receita em ${def.length} de ${meses.length} meses`,
     def.map((b) => `${rotuloMes(b.mes)}: déficit de ${fmt(b.totais.despesas - b.totais.receitas)}`).join("; "),
     "Quais despesas extraordinárias explicam os déficits e com que aprovação foram feitas?");
 
-  // 2. pagamentos possivelmente duplicados (mesmo fornecedor, mesma NF, mesmo valor)
+  // 2. pagamentos com a mesma NF e o mesmo valor
+  const vistos = new Set();
   const grupos = new Map();
   for (const d of L) {
-    if (/tarifa|banc/i.test(d.cat)) continue;
+    if (/tarifa|banc|consumo/i.test(d.cat)) continue;
     const nfOk = !NF_GENERICA.test(d.nf);
     const k = nfOk ? `${d.forn}|${d.nf}|${d.v}` : `${d.forn}|${d.desc}|${d.v}|${d.baixa}`;
     (grupos.get(k) || grupos.set(k, []).get(k)).push(d);
@@ -427,92 +460,172 @@ function alertas(meses) {
     if (g.length < 2) continue;
     const ps = g.map((d) => (d.desc.match(PARC) || [])[1]);
     const com = ps.filter(Boolean);
-    if (com.length === ps.length) continue; // só parcelas: a regra de parcelamento trata repetições
-    if (com.length >= 1 && ps.length - com.length <= 1 && new Set(com).size === com.length && !com.includes("01") && !com.includes("1")) continue; // 1ª parcela lançada sem número
+    if (com.length === ps.length) continue; // parcelas de uma mesma NF: tratado em parcelamento
+    if (com.length >= 1 && ps.length - com.length <= 1 && new Set(com).size === com.length && !com.some((n) => +n === 1)) continue; // 1ª parcela lançada sem número
     const d0 = g[0];
-    add("alta", "Possível duplicidade", `${d0.forn}: ${g.length} pagamentos de ${fmt(d0.v)} com a mesma NF ${d0.nf || ""}`.trim(),
-      g.map((d) => `${rotuloMes(d.mes)} – baixa ${d.baixa} – ${d.desc}`).join("\n"),
-      `Os pagamentos de ${fmt(d0.v)} a ${d0.forn} (NF ${d0.nf}) são serviços distintos? Se duplicados, onde está o comprovante de devolução?`,
-      g.map((d) => d.id), g[g.length - 1].mes);
-  }
-  // 2b. energia: mesma unidade consumidora e mesmo mês de referência pagos mais de uma vez
-  const uc = new Map();
-  for (const d of L) {
-    const m = d.desc.match(/(?:COELBA|ENERGIA).*?(\d{10})\.?\s*$/i); if (!m || d.v < 5) continue;
-    const k = `${m[1]}|${d.ref}`; (uc.get(k) || uc.set(k, []).get(k)).push(d);
-  }
-  for (const [k, g] of uc) if (g.length > 1) {
-    const [u, ref] = k.split("|");
-    add("media", "Possível duplicidade", `Energia: UC ${u}, referência ${ref}, paga ${g.length} vezes`,
-      g.map((d) => `${rotuloMes(d.mes)} – baixa ${d.baixa} – NF ${d.nf} – ${fmt(d.v)}`).join("\n"),
-      `As faturas da UC ${u} referentes a ${ref} são de períodos diferentes (refaturamento) ou houve pagamento em dobro?`,
-      g.map((d) => d.id), g[g.length - 1].mes);
+    g.forEach((d) => vistos.add(`${d.forn}|${d.nf}`));
+    const mesmoMes = new Set(g.map((d) => d.mes)).size === 1;
+    const mesmaRef = new Set(g.map((d) => d.ref)).size === 1;
+    // contexto: quantos pagamentos do mesmo serviço x quantos meses decorridos
+    const serie = L.filter((d) => d.forn === d0.forn && d.item === d0.item);
+    const meses1 = mesesEntre(serie[0].mes, serie.at(-1).mes);
+    const contexto = serie.length > 2 ? `\nNo período: ${serie.length} pagamentos de "${d0.item.toLowerCase()}" em ${meses1} meses${serie.length <= meses1 ? " (a quantidade não indica pagamento a mais)" : " (mais pagamentos do que meses)"}.` : "";
+    const linhas = g.map((d) => `${rotuloMes(d.mes)} – ref. ${d.ref} – baixa ${d.baixa} – ${fmt(d.v)}`).join("\n") + contexto;
+    if (mesmoMes) add("alta", "Pagamento em duplicidade", `${d0.forn}: ${g.length} pagamentos de ${fmt(d0.v)} da NF ${d0.nf || "(sem NF)"} no mesmo mês`,
+      linhas, `Comprovar a devolução dos ${fmt(d0.v * (g.length - 1))} pagos a mais a ${d0.forn} (data e conta de crédito).`, g.map((d) => d.id), d0.mes, d0.forn);
+    else if (mesmaRef) add(serie.length > meses1 ? "alta" : "media", "Documento fiscal", `${d0.forn}: NF ${d0.nf} com a mesma referência ${d0.ref} paga em ${g.length} meses`,
+      linhas, `A NF ${d0.nf} de ${d0.forn} foi paga duas vezes? Apresentar a nota fiscal de cada mês pago.`, g.map((d) => d.id), g.at(-1).mes, d0.forn);
+    else add(serie.length > meses1 ? "alta" : "media", "Documento fiscal", `${d0.forn}: NF ${d0.nf} usada em pagamentos de ${g.length} meses diferentes`,
+      linhas, `Apresentar a nota fiscal de cada mês pago a ${d0.forn}: a NF ${d0.nf} aparece em mais de um mês.`, g.map((d) => d.id), g.at(-1).mes, d0.forn);
   }
 
-  // 3. mesma NF usada em meses diferentes para o mesmo serviço (sem parcela)
+  // 3. mesma NF em meses diferentes (fora das parcelas normais de uma compra)
   const nfs = new Map();
   for (const d of L) {
-    if (NF_GENERICA.test(d.nf) || PARC.test(d.desc) || /consumo/i.test(d.cat)) continue;
-    const k = `${d.forn}|${d.nf}|${d.item}`; (nfs.get(k) || nfs.set(k, []).get(k)).push(d);
+    if (NF_GENERICA.test(d.nf) || /consumo|tarifa|banc/i.test(d.cat)) continue;
+    const k = `${d.forn}|${String(d.nf).split("/")[0]}`; (nfs.get(k) || nfs.set(k, []).get(k)).push(d);
   }
   for (const g of nfs.values()) {
-    const ms = new Set(g.map((d) => d.mes)); if (ms.size < 2) continue;
-    if (new Set(g.map((d) => d.v)).size === 1 && g.length === 2 && grupos.has(`${g[0].forn}|${g[0].nf}|${g[0].v}`)) continue; // já apontado como duplicidade
-    add("media", "Documento fiscal", `${g[0].forn}: NF ${g[0].nf} usada em ${ms.size} meses diferentes`,
-      g.map((d) => `${rotuloMes(d.mes)} – ref. ${d.ref} – ${fmt(d.v)} – ${d.item}`).join("\n"),
-      `Apresentar as notas fiscais de cada mês pago a ${g[0].forn}; a NF ${g[0].nf} cobre mais de um mês?`, g.map((d) => d.id), g[g.length - 1].mes);
+    if (new Set(g.map((d) => d.mes)).size < 2 || g.every((d) => vistos.has(`${d.forn}|${d.nf}`))) continue;
+    const parc = g.filter((d) => PARC.test(d.desc)), soltos = g.filter((d) => !PARC.test(d.desc));
+    const mesesParc = new Set(parc.map((d) => d.mes));
+    const soltosFora = soltos.filter((d) => !mesesParc.has(d.mes)); // a mesma fatura pode cobrir salário e taxa no mesmo mês
+    if (parc.length) {
+      if (!soltosFora.length) continue; // só parcelas: tratado em parcelamento
+      const nums = parc.map((d) => +d.desc.match(PARC)[1]);
+      if (!nums.includes(1) && soltosFora.every((d) => parc.every((p) => d.mes < p.mes)) && soltosFora.length === 1) continue; // 1ª parcela lançada sem número
+    }
+    const porMes = new Set(g.map((d) => d.mes));
+    const tot = soma(g, (d) => d.v);
+    add("media", "Documento fiscal", `${g[0].forn}: NF ${String(g[0].nf).split("/")[0]} usada em ${porMes.size} meses diferentes (${fmt(tot)})`,
+      g.map((d) => `${rotuloMes(d.mes)} – NF ${d.nf} – ref. ${d.ref} – ${fmt(d.v)} – ${d.desc}`).join("\n"),
+      `A mesma nota fiscal de ${g[0].forn} cobre todos esses pagamentos? Qual o valor total da NF e do serviço contratado?`, g.map((d) => d.id), g.at(-1).mes, g[0].forn);
+  }
+  // 3b. mesma NF com dois parcelamentos de valores diferentes (parcelas com o mesmo número)
+  const pnf = new Map();
+  for (const d of L) {
+    const m = d.desc.match(PARC); if (!m || NF_GENERICA.test(d.nf)) continue;
+    const k = `${d.forn}|${d.nf}|${m[2]}|${d.item}`; (pnf.get(k) || pnf.set(k, []).get(k)).push({ ...d, n: +m[1] });
+  }
+  for (const g of pnf.values()) {
+    const rep = [...new Set(g.map((d) => d.n))].filter((n) => new Set(g.filter((d) => d.n === n).map((d) => Math.round(d.v))).size > 1);
+    if (!rep.length) continue;
+    const tot = soma(g, (d) => d.v), de = g[0].desc.match(PARC)[2];
+    const valores = [...new Set(g.map((d) => Math.round(d.v)))];
+    const suspeitos = L.filter((x) => NF_GENERICA.test(x.nf) && x.forn !== g[0].forn && valores.some((v) => Math.abs(x.v - v) < 1) && g.some((d) => Math.abs(mesesEntre(x.mes, d.mes)) <= 2));
+    add("media", "Parcelamento", `${g[0].forn}: NF ${g[0].nf} com dois parcelamentos de valores diferentes (${fmt(tot)} pagos)`,
+      g.sort((a, b) => a.mes.localeCompare(b.mes)).map((d) => `${rotuloMes(d.mes)} – parcela ${d.n}/${de} – ${fmt(d.v)} – ${d.tipo}`).join("\n")
+        + `\nAs parcelas ${rep.join(" e ")}/${de} aparecem com valores diferentes: parece haver duas formas de pagamento para a mesma nota.`
+        + (suspeitos.length ? `\nPagamento de mesmo valor sem nota fiscal em período próximo: ${suspeitos.map((x) => `${x.forn}, ${fmt(x.v)}, ${x.baixa}`).join("; ")}. Pode ser a parcela 1 lançada com outro nome.` : ""),
+      `Qual o valor total da NF ${g[0].nf} de ${g[0].forn} e por que há dois parcelamentos? O total pago (${fmt(tot)}) corresponde ao contrato?`,
+      [...g.map((d) => d.id), ...suspeitos.map((x) => x.id)], g.at(-1).mes, g[0].forn);
   }
 
-  // 4. parcelas com numeração repetida ou interrompidas (um alerta por fornecedor)
+  // 4. energia: mesma unidade, mesma referência e mesmo consumo pagos mais de uma vez
+  const uc = new Map(), refErradas = [];
+  for (const d of L) {
+    const r = refChave(d.ref), b = mesDe(d.baixa);
+    if (r && b && r > b && !/tarifa|banc/i.test(d.cat)) refErradas.push(d);
+    const m = d.desc.match(/(?:COELBA|ENERGIA).*?(\d{10})\.?\s*$/i); if (!m || d.v < 5) continue;
+    if (r && b && r > b) continue; // referência digitada errada
+    const k = `${m[1]}|${d.ref}|${kwh(d.desc)}`; (uc.get(k) || uc.set(k, []).get(k)).push(d);
+  }
+  for (const [k, g] of uc) if (g.length > 1) {
+    const [u, ref, kw] = k.split("|");
+    const igual = new Set(g.map((d) => d.v)).size === 1;
+    add(igual ? "media" : "baixa", "Pagamento em duplicidade", `Energia: UC ${u}, referência ${ref}, ${kw} kWh, paga ${g.length} vezes`,
+      g.map((d) => `${rotuloMes(d.mes)} – baixa ${d.baixa} – NF ${d.nf} – ${fmt(d.v)}`).join("\n") + "\nMesma unidade, mesmo mês e mesmo consumo, com notas fiscais diferentes.",
+      `As faturas ${g.map((d) => d.nf).join(" e ")} da UC ${u} são a mesma conta paga duas vezes? Se sim, a Coelba creditou a diferença?`, g.map((d) => d.id), g.at(-1).mes, "Coelba (energia)");
+  }
+  if (refErradas.length) add("baixa", "Qualidade do balancete", `${refErradas.length} lançamento(s) com mês de referência posterior ao pagamento`,
+    refErradas.map((d) => `${rotuloMes(d.mes)} – ${d.forn} – ref. ${d.ref}, pago em ${d.baixa} – ${fmt(d.v)}`).join("\n") + "\nProvável erro de digitação da administradora; dificulta conferir o que já foi pago.",
+    "Pedir à administradora a correção do mês de referência desses lançamentos.", refErradas.map((d) => d.id));
+
+  // 5. parcelamentos
   const parc = parcelas(meses);
-  for (const p of parc) if (p.repetidas.length)
-    add("media", "Parcelamento", `${p.forn}: parcela ${p.repetidas.join(", ")}/${p.de} lançada mais de uma vez`,
-      p.pagamentos.map((x) => `${rotuloMes(x.mes)} – parcela ${x.n}/${p.de} – ${fmt(x.v)}`).join("\n"),
-      `Qual o valor total contratado com ${p.forn} e quantas parcelas já foram pagas?`, p.pagamentos.map((x) => x.id), p.ultimoMes);
+  for (const p of parc) {
+    const div = p.fornecedores.length > 1 || p.totais.length > 1;
+    if (p.repetidas.length) {
+      const confere = p.pagamentos.length <= p.de;
+      add(confere ? "baixa" : "media", "Parcelamento", `${p.forn}: parcela ${p.repetidas.join(", ")}/${p.de} lançada mais de uma vez`,
+        p.pagamentos.map((x) => `${rotuloMes(x.mes)} – parcela ${x.n}/${p.de} – ${fmt(x.v)}`).join("\n") + (confere ? `\n${p.pagamentos.length} pagamentos para ${p.de} parcelas: a quantidade confere, a numeração está errada.` : `\n${p.pagamentos.length} pagamentos para ${p.de} parcelas.`),
+        confere ? `Pedir correção da numeração das parcelas de ${p.forn}.` : `Qual o valor total contratado com ${p.forn} e quantas parcelas já foram pagas?`, p.pagamentos.map((x) => x.id), p.ultimoMes, p.forn);
+    }
+    if (div) add("baixa", "Qualidade do balancete", `${p.fornecedores.join(" / ")}: mesma compra (NF ${p.nf}) lançada com fornecedor ou nº de parcelas diferentes`,
+      p.pagamentos.map((x) => `${rotuloMes(x.mes)} – parcela ${x.n} – ${fmt(x.v)}`).join("\n") + `\nTotais de parcelas citados: ${p.totais.join(" e ")}.`,
+      `Qual o fornecedor correto e em quantas parcelas foi feita a compra da NF ${p.nf}?`, p.pagamentos.map((x) => x.id), p.ultimoMes, p.forn);
+  }
   const paradas = new Map();
   for (const p of parc.filter((x) => x.interrompida)) (paradas.get(p.forn) || paradas.set(p.forn, []).get(p.forn)).push(p);
   for (const [forn, ps] of paradas) {
     const tot = soma(ps, (x) => x.aPagar);
-    add(tot > 2000 ? "media" : "baixa", "Parcelamento", `${forn}: ${ps.length > 1 ? ps.length + " parcelamentos parados" : `parcelamento parado em ${ps[0].ultimaParcela}/${ps[0].de}`} (${fmt(tot)} em aberto)`,
-      ps.map((p) => `${p.desc || p.item} – última parcela ${p.ultimaParcela}/${p.de} em ${rotuloMes(p.ultimoMes)}, faltam ${p.restantes} × ${fmt(p.valorParcela)}`).join("\n"),
-      `As parcelas restantes com ${forn} foram quitadas por outro meio, renegociadas ou estão em atraso?`,
-      ps.flatMap((p) => p.pagamentos.map((x) => x.id)), ps[0].ultimoMes);
+    const seguro = ps.some((p) => /SEGURO/i.test(p.item + " " + p.desc));
+    add(seguro ? "alta" : tot > 2000 ? "media" : "baixa", "Parcelamento", `${forn}: ${ps.length > 1 ? ps.length + " parcelamentos parados" : `parcelamento parado em ${ps[0].ultimaParcela}/${ps[0].de}`} (${fmt(tot)} em aberto)`,
+      ps.map((p) => `${p.desc || p.item} – última parcela ${p.ultimaParcela}/${p.de} em ${rotuloMes(p.ultimoMes)}, faltam ${p.restantes} × ${fmt(p.valorParcela)}`).join("\n")
+        + (seguro ? "\nO seguro da edificação é obrigatório (Código Civil, art. 1.346). Sem as demais parcelas, a apólice pode ter sido cancelada." : ""),
+      seguro ? "A apólice do seguro está vigente? Apresentar apólice e comprovantes das parcelas 2 em diante." : `As parcelas restantes com ${forn} foram quitadas por outro meio, renegociadas ou estão em atraso?`,
+      ps.flatMap((p) => p.pagamentos.map((x) => x.id)), ps[0].ultimoMes, forn);
   }
 
-  // 5. custos financeiros
+  // 6. custos financeiros
   const fin = custosFinanceiros(meses);
-  if (fin.jurosCartao.length) add("alta", "Custo financeiro", `Juros de cartão de crédito: ${fmt(soma(fin.jurosCartao, (x) => x.v))}`,
-    fin.jurosCartao.map((d) => `${rotuloMes(d.mes)}: ${fmt(d.v)}`).join("; ") + ". Juros de cartão indicam fatura paga parcialmente (rotativo).",
-    "Por que a fatura do cartão do condomínio não foi paga integralmente? Quem autoriza compras parceladas no cartão?", fin.jurosCartao.map((d) => d.id));
+  if (fin.jurosCartao.length) add("media", "Custo financeiro", `Juros na fatura do cartão de crédito: ${fmt(soma(fin.jurosCartao, (x) => x.v))}`,
+    fin.jurosCartao.map((d) => `${rotuloMes(d.mes)}: ${fmt(d.v)} (lançado como "${d.desc}", pagamento via cartão)`).join("\n") + "\nJuros cobrados na fatura indicam que ela não foi paga integralmente (crédito rotativo) ou que houve parcelamento com juros.",
+    "Por que houve juros na fatura do cartão do condomínio? Apresentar as faturas de mai e jun/2026 e dizer quem autoriza compras parceladas no cartão.", fin.jurosCartao.map((d) => d.id));
   if (fin.juros.length || fin.iof.length) {
     const j = soma(fin.juros, (x) => x.v), i = soma(fin.iof, (x) => x.v);
-    add(j + i > 500 ? "media" : "baixa", "Custo financeiro", `Juros e IOF bancários: ${fmt(j + i)}`,
-      `Juros de conta ${fmt(j)} e IOF ${fmt(i)} no período, concentrados nos meses de saldo negativo.`,
-      "O condomínio usa o limite de cheque especial? Qual a taxa contratada?", [...fin.juros, ...fin.iof].map((d) => d.id));
+    add(j + i > 500 ? "media" : "baixa", "Custo financeiro", `Juros e IOF de conta negativa: ${fmt(j + i)}`,
+      `Juros ${fmt(j)} e IOF ${fmt(i)}, nos meses em que a conta usou o limite (${[...new Set([...fin.juros, ...fin.iof].map((d) => rotuloMes(d.mes)))].join(", ")}).`
+        + (fin.iofAplic.length ? `\nNão incluídos: ${fmt(soma(fin.iofAplic, (x) => x.v))} de IOF sobre resgate de aplicação (${[...new Set(fin.iofAplic.map((d) => rotuloMes(d.mes)))].join(", ")}).` : ""),
+      "Qual a taxa do limite de cheque especial e por que o condomínio ficou dependente dele?", [...fin.juros, ...fin.iof].map((d) => d.id));
   }
-  if (fin.multas.length) add("media", "Custo financeiro", `Multas e juros por pagamento em atraso: ${fmt(soma(fin.multas, (x) => x.v))}`,
-    fin.multas.map((m) => `${rotuloMes(m.mes)}: ${m.texto}`).join("\n"),
-    "Os encargos por atraso serão absorvidos pelo condomínio ou cobrados de quem deu causa?");
+  if (fin.multas.length) {
+    const prop = fin.multas.filter((m) => !m.terceiro), terc = fin.multas.filter((m) => m.terceiro);
+    add("media", "Custo financeiro", `Multas e juros por pagamento em atraso: ${fmt(soma(prop, (x) => x.v))}${terc.length ? ` (+ ${fmt(soma(terc, (x) => x.v))} atribuídos à construtora)` : ""}`,
+      fin.multas.map((m) => `${rotuloMes(m.mes)} – ${fmt(m.v)}${m.terceiro ? " (construtora)" : ""}: ${m.texto.replace(/^\d{2}\)\s*/, "")}`).join("\n")
+        + (fin.futuras.length ? `\n\nEncargos ainda não quantificados (a administradora informa que virão nas próximas faturas):\n${fin.futuras.map((f) => `${rotuloMes(f.mes)}: ${f.texto.replace(/^\d{2}\)\s*/, "")}`).join("\n")}` : ""),
+      `Os encargos por atraso foram causados pela falta de caixa; quem arca com eles?${terc.length ? " Os encargos atribuídos à construtora já foram ressarcidos ao condomínio?" : ""}`);
+  }
 
-  // 6. notas explicativas que pedem atenção
+  // 7. notas explicativas que pedem atenção
   for (const b of meses) for (const n of b.notas || []) {
-    if (/duplicidade|devolvid/i.test(n.texto)) add("alta", "Nota explicativa", `${rotuloMes(b.mes)}: administradora informa pagamento em duplicidade`, n.texto,
-      "O valor pago em duplicidade já foi devolvido? Em que data e para qual conta?", [], b.mes);
-    else if (/apesar da NF|diferen[çc]a|n[ãa]o foram encaminhados/i.test(n.texto)) add("media", "Nota explicativa", `${rotuloMes(b.mes)}: diferença entre pagamento e documento`, n.texto,
-      "Qual a justificativa e o documento que comprova o valor efetivamente pago?", [], b.mes);
+    const t = n.texto, forn = identificarFornecedor(t);
+    if (/duplicidade/i.test(t)) {
+      const nfN = (t.match(/(?:NF|nota fiscal)\s*(?:n[º°o]\s*)?(\d+)/i) || [])[1];
+      const ja = A.find((a) => a.tipo === "Pagamento em duplicidade" && nfN && a.titulo.includes(`NF ${nfN}`));
+      if (ja) { ja.detalhe += `\nNota da administradora: ${t.replace(/^\d{2}\)\s*/, "")}`; continue; }
+      if (/desconto|abatid/i.test(t)) add("media", "Nota explicativa", `${rotuloMes(b.mes)}: contas pagas em duplicidade com crédito prometido nas faturas seguintes`, t,
+        "O valor pago em duplicidade foi abatido nas faturas seguintes? Quanto e em quais meses?", [], b.mes, forn);
+      else add("alta", "Nota explicativa", `${rotuloMes(b.mes)}: administradora informa pagamento em duplicidade`, t,
+        "O valor pago em duplicidade já foi devolvido? Em que data e para qual conta?", [], b.mes, forn);
+    } else if (/parcelamento das faturas|parcela .* do parcelamento/i.test(t)) {
+      add("media", "Atraso de pagamento", `${rotuloMes(b.mes)}: faturas de ${forn || "fornecedor"} parceladas por falta de caixa`, t,
+        `Quanto ainda falta pagar do parcelamento com ${forn || "o fornecedor"}, com quais encargos, e há risco para salários e encargos trabalhistas?`, [], b.mes, forn);
+    } else if (/apesar da NF/i.test(t)) {
+      const v = [...t.matchAll(/R\$\s*([\d.]+,\d{2})|(?:valor de|no valor de)\s*([\d.]+,\d{2})/gi)].map((m) => num(m[1] || m[2]));
+      const pago = v[0], nf = v[v.length - 1];
+      const acima = pago > nf;
+      add(acima ? "media" : "baixa", "Nota explicativa", `${rotuloMes(b.mes)}: ${forn || "fornecedor"} recebeu ${acima ? "mais" : "menos"} do que o valor da NF (${fmt(pago)} x ${fmt(nf)})`, t,
+        acima ? `Qual a base para pagar ${fmt(pago - nf)} acima da nota fiscal a ${forn || "fornecedor"}? Há aditivo ou reajuste aprovado?` : `A diferença de ${fmt(nf - pago)} a menor está em aberto com ${forn || "o fornecedor"}?`, [], b.mes, forn);
+    } else if (/diferen[çc]a/i.test(t) && /desconto|frete/i.test(t)) {
+      add("info", "Nota explicativa", `${rotuloMes(b.mes)}: pagamento menor que a NF, explicado pela administradora`, t, "", [], b.mes, forn);
+    } else if (/n[ãa]o foram encaminhados/i.test(t)) {
+      add("media", "Documentação", `${rotuloMes(b.mes)}: despesa paga sem nota fiscal ou recibo do fornecedor`, t,
+        "Apresentar a nota fiscal da despesa e identificar o fornecedor e o serviço prestado.", [], b.mes, forn);
+    }
   }
 
-  // 7. lançamentos sem documento digitalizado (fora tarifas) e pagos só com recibo
+  // 8. documentação
   const semDoc = L.filter((d) => d.semDoc && !/tarifa|banc/i.test(d.cat));
   if (semDoc.length) add("media", "Documentação", `${semDoc.length} lançamento(s) sem documento digitalizado (${fmt(soma(semDoc, (d) => d.v))})`,
-    semDoc.map((d) => `${rotuloMes(d.mes)} – ${d.forn} – ${fmt(d.v)}`).join("\n"),
+    semDoc.map((d) => `${rotuloMes(d.mes)} – ${d.forn} – ${fmt(d.v)} – ${d.desc}`).join("\n") + "\nMarcados com * no balancete: \"conta sem documento digitalizado\".",
     "Solicitar à administradora a nota fiscal ou recibo de cada um desses lançamentos.", semDoc.map((d) => d.id));
-  const recibo = L.filter((d) => /^(RECIBO|COMPROVAN)/i.test(d.nf) && d.v >= 500);
-  if (recibo.length) add("baixa", "Documentação", `${recibo.length} pagamento(s) acima de R$ 500 sem nota fiscal (${fmt(soma(recibo, (d) => d.v))})`,
-    recibo.map((d) => `${rotuloMes(d.mes)} – ${d.forn} – ${fmt(d.v)} – ${d.nf}`).join("\n"),
-    "Por que esses fornecedores não emitiram nota fiscal? Houve retenção de impostos quando devida?", recibo.map((d) => d.id));
+  const recibo = L.filter((d) => /^(RECIBO|COMPROVAN)/i.test(d.nf) && d.v >= 500 && !foiReembolsado(d));
+  if (recibo.length) add("baixa", "Documentação", `${recibo.length} pagamento(s) acima de R$ 500 só com recibo ou comprovante (${fmt(soma(recibo, (d) => d.v))})`,
+    recibo.map((d) => `${rotuloMes(d.mes)} – ${d.forn} – ${fmt(d.v)} – ${d.nf}`).join("\n") + "\nPagamentos a pessoa física exigem RPA com retenção de INSS e IR quando aplicável.",
+    "Por que esses pagamentos não têm nota fiscal? Para pessoas físicas, houve RPA e recolhimento de INSS/IR?", recibo.map((d) => d.id));
 
-  // 8. despesa recorrente que deixou de aparecer
+  // 9. despesa recorrente que deixou de aparecer
   if (ordem.length >= 4) {
     const ultimos2 = new Set(ordem.slice(-2)), janela = new Set(ordem.slice(-8, -2));
     for (const f of porFornecedor(meses)) {
@@ -520,30 +633,33 @@ function alertas(meses) {
       const naJanela = [...f.meses].filter((m) => janela.has(m)).length;
       if (L.filter((d) => d.forn === f.forn && janela.has(d.mes)).every((d) => PARC.test(d.desc))) continue;
       const recente = [...f.meses].some((m) => ultimos2.has(m));
-      if (naJanela >= 3 && !recente) add("media", "Despesa ausente", `${f.forn}: pago em ${naJanela} dos meses anteriores, sem pagamento nos 2 últimos`,
-        `Último pagamento em ${rotuloMes(f.ultimo)}. Pode ser conta em atraso, contrato encerrado ou pagamento por fora da administradora.`,
-        `A despesa com ${f.forn} foi encerrada ou está em aberto?`, [], ult);
+      if (naJanela >= 3 && !recente) {
+        const refs = L.filter((d) => d.forn === f.forn).map((d) => d.ref);
+        add("media", "Despesa ausente", `${f.forn}: sem pagamento nos 2 últimos meses`,
+          `Pago em ${naJanela} dos 6 meses anteriores; última referência paga: ${refs.sort((a, b) => (refChave(a) || "").localeCompare(refChave(b) || "")).at(-1)} (baixa em ${rotuloMes(f.ultimo)}). Pode ser conta em atraso, contrato encerrado ou pagamento fora da administradora.`,
+          `A despesa com ${f.forn} foi encerrada ou está em aberto? Há risco de corte do serviço?`, [], ult, f.forn);
+      }
     }
   }
 
-  // 9. valor de contrato recorrente que mudou
+  // 10. valor de contrato recorrente que mudou
   const rec = new Map();
   for (const d of L) { const k = `${d.forn}|${d.item}`; (rec.get(k) || rec.set(k, []).get(k)).push(d); }
   for (const g of rec.values()) {
-    const porMes = new Map(); g.forEach((d) => porMes.set(d.mes, d.v)); // um valor por mês
+    const porMes = new Map(); g.forEach((d) => porMes.set(d.mes, d.v));
     if (porMes.size < 4 || /consumo|tarifa|banc|pessoal|impost/i.test(g[0].cat) || PARC.test(g[0].desc)) continue;
     const vs = [...porMes.entries()].sort((a, b) => a[0].localeCompare(b[0])).map((x) => x[1]);
     const prev = vs.slice(0, -1), ant = mediana(prev), atual = vs[vs.length - 1];
     const media = prev.reduce((a, b) => a + b, 0) / prev.length;
     const cv = Math.sqrt(prev.reduce((a, b) => a + (b - media) ** 2, 0) / prev.length) / media;
-    if (cv > 0.04) continue; // valor nunca foi estável: não é contrato fixo
+    if (cv > 0.04) continue;
     if (ant > 300 && Math.abs(atual - ant) / ant > 0.03 && Math.abs(atual - ant) > 50 && [...porMes.keys()].includes(ult))
-      add("baixa", "Contrato", `${g[0].forn} (${g[0].item.toLowerCase()}): valor mudou de ${fmt(ant)} para ${fmt(atual)}`,
-        `Variação de ${((atual / ant - 1) * 100).toFixed(1).replace(".", ",")}% no último mês em relação ao valor habitual.`,
-        `Há aditivo ou reajuste contratual que justifique o novo valor pago a ${g[0].forn}?`, g.map((d) => d.id), ult);
+      add(atual > ant ? "baixa" : "info", "Contrato", `${g[0].forn} (${g[0].item.toLowerCase()}): valor ${atual > ant ? "subiu" : "caiu"} de ${fmt(ant)} para ${fmt(atual)}`,
+        [...porMes.entries()].sort((a, b) => a[0].localeCompare(b[0])).map(([m, v]) => `${rotuloMes(m)}: ${fmt(v)}`).join("; "),
+        atual > ant ? `Há aditivo ou reajuste aprovado que justifique o novo valor pago a ${g[0].forn}?` : `A redução de ${g[0].forn} reflete mudança de escopo do contrato?`, g.map((d) => d.id), ult, g[0].forn);
   }
 
-  // 10. categoria fora do padrão no mês
+  // 11. categoria fora do padrão
   const recMed = mediana(meses.map((b) => b.totais.receitas));
   const mesesCheios = meses.filter((b) => b.totais.receitas > recMed * 0.7);
   for (const c of porCategoria(mesesCheios)) {
@@ -556,12 +672,12 @@ function alertas(meses) {
       `O que explica os gastos de ${c.cat.toLowerCase()} nesses meses? Foram aprovados em assembleia e com orçamentos?`, [], picos[picos.length - 1].mes);
   }
 
-  // 11. novos fornecedores de valor alto
+  // 12. novos fornecedores de valor alto
   if (ordem.length > 1) for (const f of porFornecedor(meses))
     if (f.primeiro === ult && f.total >= 3000) add("baixa", "Novo fornecedor", `${f.forn} aparece pela primeira vez com ${fmt(f.total)}`,
-      "Fornecedor novo no último mês carregado.", `Como ${f.forn} foi contratado (orçamentos, contrato, aprovação)?`, [], ult);
+      "Fornecedor novo no último mês carregado.", `Como ${f.forn} foi contratado (orçamentos, contrato, aprovação)?`, [], ult, f.forn);
 
-  // 12. estrutura de receita
+  // 13. receita
   const cotas = meses.map((b) => ({ mes: b.mes, v: Math.max(0, ...b.receitas.map((r) => r.v)) }));
   for (let i = 1; i < cotas.length; i++) {
     const a = cotas[i - 1].v, c = cotas[i].v;
@@ -569,12 +685,12 @@ function alertas(meses) {
       add("info", "Receita", `Arrecadação principal mudou em ${rotuloMes(cotas[i].mes)}: ${fmt(a)} → ${fmt(c)}`,
         `Variação de ${((c / a - 1) * 100).toFixed(1).replace(".", ",")}%.`, "A mudança corresponde ao reajuste aprovado em assembleia (ata e data de vigência)?", [], cotas[i].mes);
   }
-  const temReserva = meses.some((b) => b.receitas.some((r) => /RESERVA/i.test(r.desc)));
-  if (!temReserva) add("media", "Receita", "Nenhuma arrecadação de fundo de reserva no período",
-    "Os balancetes não mostram receita de fundo de reserva nem de taxa extra; investimentos e obras foram pagos com a taxa ordinária.",
-    "A convenção prevê fundo de reserva? Por que não está sendo arrecadado/segregado?");
+  if (!meses.some((b) => b.receitas.some((r) => /RESERVA/i.test(r.desc))))
+    add("media", "Receita", "Nenhuma arrecadação de fundo de reserva identificada",
+      "Os balancetes não mostram receita de fundo de reserva nem de taxa extra; obras e compras de bens foram pagas com a taxa ordinária. A própria administradora recomenda, nas notas, separar o fundo de reserva.",
+      "A convenção prevê fundo de reserva? Ele está embutido na cota sem segregação? Onde está aplicado?");
 
-  // 13. concentração e peso de pessoal
+  // 14. estrutura de custos
   const ind = indicadores(meses);
   if (ind.pessoalPct > 0.45) add("info", "Estrutura de custos", `Pessoal consome ${(ind.pessoalPct * 100).toFixed(1).replace(".", ",")}% da receita`,
     "Inclui folha terceirizada, taxa de administração de RH e tributos retidos.", "Há estudo de dimensionamento do quadro e cotação de outras prestadoras?");
@@ -582,8 +698,20 @@ function alertas(meses) {
   if (top && ind.despesa && top.total / ind.despesa > 0.25) add("info", "Estrutura de custos", `${top.forn} concentra ${(top.total / ind.despesa * 100).toFixed(1).replace(".", ",")}% das despesas`,
     `${fmt(top.total)} em ${top.n} lançamentos.`, `O contrato com ${top.forn} foi renovado com cotação de mercado?`);
 
-  const ordemSev = { alta: 0, media: 1, baixa: 2, info: 3 };
-  return A.sort((a, b) => ordemSev[a.sev] - ordemSev[b.sev] || (b.mes || "").localeCompare(a.mes || ""));
+  // 15. consolida por fornecedor os pontos de documento, contrato e notas de pagamento
+  const SEVN = { alta: 0, media: 1, baixa: 2, info: 3 };
+  const juntaveis = (a) => a.forn && ["Documento fiscal", "Contrato", "Nota explicativa", "Parcelamento"].includes(a.tipo) && !/^Coelba/.test(a.forn);
+  const porForn = new Map();
+  for (const a of A) if (juntaveis(a)) (porForn.get(a.forn) || porForn.set(a.forn, []).get(a.forn)).push(a);
+  const saida = A.filter((a) => !(juntaveis(a) && porForn.get(a.forn).length > 1));
+  for (const [forn, as] of porForn) if (as.length > 1) {
+    as.sort((x, y) => SEVN[x.sev] - SEVN[y.sev]);
+    saida.push({ sev: as[0].sev, tipo: "Fornecedor", forn, mes: as.map((a) => a.mes).filter(Boolean).sort().at(-1) || null,
+      titulo: `${forn}: ${as.length} pontos a esclarecer`, ids: as.flatMap((a) => a.ids),
+      detalhe: as.map((a) => `• ${a.titulo}\n${a.detalhe}`).join("\n\n"),
+      pergunta: [...new Set(as.map((a) => a.pergunta).filter(Boolean))].join(" ") });
+  }
+  return saida.sort((a, b) => SEVN[a.sev] - SEVN[b.sev] || (b.mes || "").localeCompare(a.mes || ""));
 }
 
 // ===== executivo.mjs
@@ -1186,7 +1314,7 @@ function conselho() {
     "Apólice do seguro obrigatório do condomínio e comprovantes de pagamento.",
     "Atas das assembleias que aprovaram obras, compras de bens e reajustes da cota.",
   ]);
-  if (A.some((a) => a.tipo === "Possível duplicidade")) docs.add("Comprovantes de devolução dos pagamentos em duplicidade.");
+  if (A.some((a) => a.tipo === "Pagamento em duplicidade")) docs.add("Comprovantes de devolução dos pagamentos em duplicidade.");
   if (A.some((a) => a.tipo === "Documentação")) docs.add("Documentos fiscais dos lançamentos sem documento digitalizado e dos pagamentos feitos só com recibo.");
   if (A.some((a) => /cart[ãa]o/i.test(a.titulo))) docs.add("Faturas do cartão de crédito do condomínio e lista de quem pode usá-lo.");
   if (S.meses.some((b) => b.despesas.some((d) => /DARF|RETEN|IMPOSTO RETIDO/i.test(d.desc + d.nf)))) docs.add("Guias de retenção de tributos (DARF/INSS) de cada nota fiscal de serviços com retenção.");

@@ -328,7 +328,7 @@ function conselho() {
     "Apólice do seguro obrigatório do condomínio e comprovantes de pagamento.",
     "Atas das assembleias que aprovaram obras, compras de bens e reajustes da cota.",
   ]);
-  if (A.some((a) => a.tipo === "Possível duplicidade")) docs.add("Comprovantes de devolução dos pagamentos em duplicidade.");
+  if (A.some((a) => a.tipo === "Pagamento em duplicidade")) docs.add("Comprovantes de devolução dos pagamentos em duplicidade.");
   if (A.some((a) => a.tipo === "Documentação")) docs.add("Documentos fiscais dos lançamentos sem documento digitalizado e dos pagamentos feitos só com recibo.");
   if (A.some((a) => /cart[ãa]o/i.test(a.titulo))) docs.add("Faturas do cartão de crédito do condomínio e lista de quem pode usá-lo.");
   if (S.meses.some((b) => b.despesas.some((d) => /DARF|RETEN|IMPOSTO RETIDO/i.test(d.desc + d.nf)))) docs.add("Guias de retenção de tributos (DARF/INSS) de cada nota fiscal de serviços com retenção.");
