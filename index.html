@@ -1,0 +1,353 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Balancetes Farol de Itapuã</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&family=Manrope:wght@600;700;800&display=swap">
+<style>
+/* Layout: cabeçalho fixo com abas; cada aba é um painel de leitura densa (resumo antes do detalhe). */
+:root {
+  --bg: #f3f6f7; --surface: #ffffff; --surface-2: #eaf0f2; --ink: #13232a; --muted: #5a6c75; --line: #d8e1e5;
+  --accent: #0d6b75; --accent-soft: #d6ecee; --beam: #d9962b;
+  --crit: #b8432f; --crit-soft: #f7e3df; --warn: #a86b12; --warn-soft: #f8ecd6; --ok: #2c7a51; --ok-soft: #dcefe4; --info: #3c6596; --info-soft: #e1e9f4;
+  --f-display: "Manrope", "Segoe UI", system-ui, sans-serif;
+  --f-body: "IBM Plex Sans", "Segoe UI", system-ui, sans-serif;
+  --f-num: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+  --r: 10px;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #0e181c; --surface: #142228; --surface-2: #1a2c33; --ink: #e4edf0; --muted: #9db0b8; --line: #263a42;
+  --accent: #4fb4be; --accent-soft: #173a40; --beam: #f0b252;
+  --crit: #ee8a76; --crit-soft: #3a211c; --warn: #e6b05a; --warn-soft: #36290f; --ok: #6cc797; --ok-soft: #173326; --info: #8fb2e0; --info-soft: #1c2a3d;
+  color-scheme: dark; } }
+:root[data-theme="dark"] {
+  --bg: #0e181c; --surface: #142228; --surface-2: #1a2c33; --ink: #e4edf0; --muted: #9db0b8; --line: #263a42;
+  --accent: #4fb4be; --accent-soft: #173a40; --beam: #f0b252;
+  --crit: #ee8a76; --crit-soft: #3a211c; --warn: #e6b05a; --warn-soft: #36290f; --ok: #6cc797; --ok-soft: #173326; --info: #8fb2e0; --info-soft: #1c2a3d;
+  color-scheme: dark; }
+
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+html, body { margin: 0; }
+:root { padding-top: env(safe-area-inset-top, 0px); padding-bottom: env(safe-area-inset-bottom, 0px); }
+body { background: var(--bg); color: var(--ink); font: 15px/1.5 var(--f-body); -webkit-font-smoothing: antialiased; }
+body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-area-inset-top, 0px); z-index: 10; background: var(--surface); }
+.wrap { max-width: 1240px; margin: 0 auto; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+h1, h2, h3 { font-family: var(--f-display); letter-spacing: -0.01em; text-wrap: balance; margin: 0; }
+h2 { font-size: 1.35rem; }
+h3 { font-size: 1.02rem; }
+p { margin: 0; }
+a { color: var(--accent); }
+.num, td.n, .kpi b { font-family: var(--f-num); font-variant-numeric: tabular-nums; }
+.muted { color: var(--muted); }
+.small { font-size: 0.84rem; }
+.eyebrow { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); font-weight: 600; }
+
+header.top { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 5; background: var(--surface); border-bottom: 1px solid var(--line); }
+.top .wrap { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 20px; padding-block: 12px 0; }
+.brand { display: flex; align-items: center; gap: 12px; min-width: 0; }
+.brand svg { flex: none; }
+.brand h1 { font-size: 1.12rem; line-height: 1.2; }
+.brand .sub { font-size: 0.8rem; color: var(--muted); }
+.periodo { margin-left: auto; display: flex; flex-wrap: wrap; gap: 8px; align-items: center; font-size: 0.85rem; }
+select, input[type="text"], input[type="password"], input[type="search"] {
+  font: inherit; color: var(--ink); background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 6px 10px; min-width: 0; }
+select:focus-visible, input:focus-visible, button:focus-visible, a:focus-visible, summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+nav.abas { width: 100%; display: flex; gap: 2px; overflow-x: auto; scrollbar-width: none; margin-top: 4px; }
+nav.abas a { padding: 10px 14px; text-decoration: none; color: var(--muted); font-weight: 600; font-size: 0.88rem; border-bottom: 3px solid transparent; white-space: nowrap; }
+nav.abas a[aria-current="page"] { color: var(--ink); border-bottom-color: var(--accent); }
+nav.abas a .cnt { display: inline-block; min-width: 20px; padding: 0 6px; margin-left: 6px; border-radius: 99px; background: var(--crit-soft); color: var(--crit); font-size: 0.75rem; font-family: var(--f-num); }
+
+main .wrap { padding-block: 22px 60px; display: grid; grid-template-columns: minmax(0, 1fr); gap: 22px; }
+section[data-aba] { display: grid; grid-template-columns: minmax(0, 1fr); gap: 18px; min-width: 0; }
+.kpi { min-width: 0; } .kpi b { white-space: nowrap; font-size: clamp(1rem, 1.5vw, 1.2rem); }
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); padding: 18px; min-width: 0; }
+.cab { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 8px 16px; }
+.grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 420px), 1fr)); gap: 18px; }
+
+.kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 200px), 1fr)); gap: 12px; }
+@media (max-width: 520px) { .kpis { grid-template-columns: 1fr 1fr; gap: 8px; } .kpi { padding: 10px 12px; } .kpi b { font-size: 1rem; } }
+.kpi { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); padding: 14px 16px; display: grid; gap: 4px; align-content: start; }
+.kpi b { font-size: 1.28rem; font-weight: 500; }
+.kpi .det { font-size: 0.8rem; color: var(--muted); }
+.kpi.neg b { color: var(--crit); }
+.kpi.pos b { color: var(--ok); }
+
+.leitura { display: grid; gap: 8px; padding: 0; margin: 0; list-style: none; }
+.leitura li { display: grid; grid-template-columns: 10px 1fr; gap: 10px; align-items: baseline; }
+.leitura li::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: var(--accent); transform: translateY(-1px); }
+.leitura li.alta::before { background: var(--crit); } .leitura li.media::before { background: var(--warn); } .leitura li.ok::before { background: var(--ok); }
+
+.tabela { overflow-x: auto; border: 1px solid var(--line); border-radius: var(--r); background: var(--surface); }
+table { border-collapse: collapse; width: 100%; font-size: 0.86rem; }
+th, td { padding: 8px 10px; border-bottom: 1px solid var(--line); text-align: left; vertical-align: top; }
+th { font-size: 0.74rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); background: var(--surface-2); position: sticky; top: 0; white-space: nowrap; }
+td.n, th.n { text-align: right; white-space: nowrap; }
+tr.total td { font-weight: 600; background: var(--surface-2); }
+tbody tr:hover td { background: var(--surface-2); }
+td.neg { color: var(--crit); }
+.heat { position: relative; }
+.mini { color: var(--muted); font-size: 0.76rem; }
+
+.chart svg { width: 100%; height: auto; display: block; }
+.chart text { fill: var(--muted); font: 11px var(--f-body); }
+.legenda { display: flex; flex-wrap: wrap; gap: 14px; font-size: 0.8rem; color: var(--muted); }
+.legenda i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 6px; vertical-align: -1px; }
+
+.barra { height: 8px; border-radius: 4px; background: var(--surface-2); overflow: hidden; min-width: 60px; }
+.barra span { display: block; height: 100%; background: var(--accent); }
+
+.pill { display: inline-block; padding: 1px 9px; border-radius: 99px; font-size: 0.72rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; white-space: nowrap; }
+.pill.alta { background: var(--crit-soft); color: var(--crit); } .pill.media { background: var(--warn-soft); color: var(--warn); }
+.pill.baixa { background: var(--info-soft); color: var(--info); } .pill.info { background: var(--surface-2); color: var(--muted); }
+.pill.ok { background: var(--ok-soft); color: var(--ok); } .pill.local { background: var(--warn-soft); color: var(--warn); }
+
+.alertas { display: grid; gap: 10px; }
+.alerta { background: var(--surface); border: 1px solid var(--line); border-left: 4px solid var(--line); border-radius: var(--r); padding: 12px 16px; display: grid; gap: 6px; }
+.alerta.alta { border-left-color: var(--crit); } .alerta.media { border-left-color: var(--warn); } .alerta.baixa { border-left-color: var(--info); }
+.alerta .linha1 { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.alerta .tit { font-weight: 600; }
+.alerta pre { margin: 0; white-space: pre-wrap; font: 0.82rem/1.5 var(--f-body); color: var(--muted); }
+.alerta .perg { font-size: 0.85rem; }
+.alerta .perg::before { content: "Pergunta: "; font-weight: 600; color: var(--ink); }
+.filtros { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chip { border: 1px solid var(--line); background: var(--surface); color: var(--ink); border-radius: 99px; padding: 4px 12px; font: inherit; font-size: 0.82rem; cursor: pointer; }
+.chip[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: var(--surface); }
+
+button.btn { font: inherit; font-weight: 600; font-size: 0.86rem; border-radius: 8px; padding: 8px 14px; border: 1px solid var(--accent); background: var(--accent); color: var(--surface); cursor: pointer; }
+button.btn.sec { background: var(--surface); color: var(--accent); }
+button.btn.perigo { background: var(--surface); color: var(--crit); border-color: var(--crit); }
+button.link { font: inherit; background: none; border: 0; color: var(--accent); padding: 0; cursor: pointer; text-decoration: underline; font-size: 0.82rem; }
+button:disabled { opacity: 0.5; cursor: default; }
+
+.drop { border: 2px dashed var(--line); border-radius: var(--r); padding: 26px; text-align: center; display: grid; gap: 8px; justify-items: center; background: var(--surface); }
+.drop.over { border-color: var(--accent); background: var(--accent-soft); }
+.log { display: grid; gap: 6px; font-size: 0.86rem; }
+.log div { padding: 8px 12px; border-radius: 8px; background: var(--surface-2); }
+.log .erro { background: var(--crit-soft); color: var(--crit); }
+.log .ok { background: var(--ok-soft); color: var(--ok); }
+.form { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 200px), 1fr)); gap: 10px; }
+.form label { display: grid; gap: 4px; font-size: 0.8rem; color: var(--muted); }
+.acoes { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+
+.texto { max-width: 72ch; display: grid; gap: 10px; align-content: start; }
+.texto ul, .texto ol { margin: 0; padding-left: 1.2em; display: grid; gap: 6px; }
+details.bloco { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); padding: 14px 18px; }
+details.bloco summary { cursor: pointer; font-family: var(--f-display); font-weight: 700; }
+details.bloco[open] summary { margin-bottom: 10px; }
+.minuta { font-family: var(--f-body); background: var(--surface-2); border-radius: 8px; padding: 16px; white-space: pre-wrap; line-height: 1.6; max-width: 80ch; }
+.vazio { padding: 30px; text-align: center; color: var(--muted); }
+.toast { position: fixed; right: max(16px, env(safe-area-inset-right, 0px)); bottom: calc(16px + env(safe-area-inset-bottom, 0px)); background: var(--ink); color: var(--bg); padding: 10px 16px; border-radius: 8px; font-size: 0.88rem; max-width: min(420px, calc(100vw - 32px)); z-index: 20; }
+@media (max-width: 640px) { .periodo { margin-left: 0; } .kpi b { font-size: 1.12rem; } }
+@media (prefers-reduced-motion: no-preference) { .barra span { transition: width .4s ease; } }
+</style>
+</head>
+<body>
+<header class="top">
+  <div class="wrap">
+    <div class="brand">
+      <svg width="34" height="34" viewBox="0 0 34 34" aria-hidden="true">
+        <path d="M17 3 L21 9 H13 Z" fill="var(--beam)"/>
+        <rect x="13" y="9" width="8" height="4" fill="var(--accent)"/>
+        <path d="M13.5 13 H20.5 L22.5 30 H11.5 Z" fill="var(--accent)"/>
+        <rect x="12.6" y="18" width="8.8" height="2.4" fill="var(--surface)"/>
+        <rect x="12" y="24" width="10" height="2.4" fill="var(--surface)"/>
+        <path d="M4 31 H30" stroke="var(--line)" stroke-width="2"/>
+      </svg>
+      <div>
+        <h1 id="nomeCond">Condomínio Farol de Itapuã</h1>
+        <div class="sub">Análise de balancetes · Logo Gestão Condominial · <span id="statusBase">carregando…</span></div>
+      </div>
+    </div>
+    <div class="periodo">
+      <label for="de">De</label><select id="de"></select>
+      <label for="ate">até</label><select id="ate"></select>
+    </div>
+    <nav class="abas" aria-label="Seções">
+      <a href="#painel">Painel</a>
+      <a href="#categorias">Categorias</a>
+      <a href="#fornecedores">Fornecedores</a>
+      <a href="#alertas">Alertas<span class="cnt" id="cntAlertas"></span></a>
+      <a href="#parcelas">Parcelas a vencer</a>
+      <a href="#lancamentos">Lançamentos</a>
+      <a href="#notas">Notas explicativas</a>
+      <a href="#conselho">Conselho fiscal</a>
+      <a href="#dados">Importar PDF</a>
+    </nav>
+  </div>
+</header>
+
+<main><div class="wrap">
+
+<section data-aba="painel">
+  <div class="kpis" id="kpis"></div>
+  <div class="card chart">
+    <div class="cab"><h2>Receitas, despesas e saldo</h2>
+      <div class="legenda"><span><i style="background:var(--accent)"></i>Receita</span><span><i style="background:var(--muted)"></i>Despesa</span><span><i style="background:var(--beam)"></i>Saldo no fim do mês</span></div></div>
+    <div id="grafMensal"></div>
+  </div>
+  <div class="grid2">
+    <div class="card"><div class="cab"><h2>Leitura automática</h2><span class="small muted">recalculada a cada balancete</span></div><ul class="leitura" id="leitura" style="margin-top:12px"></ul></div>
+    <div class="card"><div class="cab"><h2>Para onde foi o dinheiro</h2><a href="#categorias" class="small">ver por mês</a></div><div id="miniCats" style="margin-top:12px;overflow-x:auto"></div></div>
+  </div>
+  <div class="tabela"><table id="tabMensal"></table></div>
+</section>
+
+<section data-aba="categorias" hidden>
+  <div class="cab"><h2>Despesas por categoria e mês</h2><span class="small muted">Células destacadas: acima de 1,8× a mediana da categoria</span></div>
+  <div class="tabela"><table id="tabCats"></table></div>
+  <div class="card chart"><h3>Peso de cada categoria no período</h3><div id="grafCats" style="margin-top:10px"></div></div>
+</section>
+
+<section data-aba="fornecedores" hidden>
+  <div class="cab"><h2>Fornecedores</h2><input type="search" id="buscaForn" placeholder="Buscar fornecedor" aria-label="Buscar fornecedor"></div>
+  <div class="tabela"><table id="tabForn"></table></div>
+</section>
+
+<section data-aba="alertas" hidden>
+  <div class="cab"><h2>Alertas automáticos</h2><div class="chips" id="filtroSev"></div></div>
+  <p class="small muted">As regras rodam sobre todos os meses do período escolhido: duplicidades, NF reutilizada, parcelas repetidas ou paradas, despesas que sumiram, contratos que mudaram de valor, custos financeiros, documentação e estrutura da receita. Um balancete novo entra nas regras assim que é importado.</p>
+  <div class="alertas" id="listaAlertas"></div>
+</section>
+
+<section data-aba="parcelas" hidden>
+  <div class="kpis" id="kpisParc"></div>
+  <div class="tabela"><table id="tabParc"></table></div>
+  <p class="small muted">Séries reconhecidas pelo texto "Parcela NN/TT" do balancete. Quando a administradora troca o valor ou a numeração no meio do caminho, a série mais recente prevalece.</p>
+</section>
+
+<section data-aba="lancamentos" hidden>
+  <div class="filtros">
+    <input type="search" id="buscaLanc" placeholder="Buscar descrição, NF, fornecedor" aria-label="Buscar lançamentos" style="flex:1 1 220px">
+    <select id="fCat" aria-label="Categoria"></select>
+    <select id="fForn" aria-label="Fornecedor"></select>
+    <label class="small"><input type="checkbox" id="fSemDoc"> só sem documento</label>
+    <button class="btn sec" id="btnCsv" type="button">Baixar CSV</button>
+  </div>
+  <div id="filtroIds" class="small" hidden></div>
+  <div class="small muted" id="resumoLanc"></div>
+  <div class="tabela"><table id="tabLanc"></table></div>
+  <button class="btn sec" id="maisLanc" type="button" hidden>Mostrar mais</button>
+</section>
+
+<section data-aba="notas" hidden>
+  <h2>Notas explicativas da administradora</h2>
+  <div id="listaNotas" class="alertas"></div>
+</section>
+
+<section data-aba="conselho" hidden>
+  <div class="cab"><h2>Material para a reunião do conselho fiscal</h2><span class="small muted" id="periodoConselho"></span></div>
+  <div class="grid2">
+    <div class="card texto"><h3>Roteiro de perguntas à administradora e ao síndico</h3><p class="small muted">Gerado a partir dos alertas de prioridade alta e média do período.</p><ol id="roteiro"></ol></div>
+    <div class="card texto"><h3>Documentos a solicitar</h3><ul id="docs"></ul></div>
+  </div>
+  <div class="card texto" style="max-width:none"><h3>Minuta de parecer (para editar)</h3>
+    <p class="small muted">Texto-base montado com os números do período selecionado. A decisão de aprovar, aprovar com ressalvas ou rejeitar é do conselho.</p>
+    <div class="minuta" id="minuta" contenteditable="true" spellcheck="true"></div>
+    <div class="acoes"><button class="btn sec" id="copiarMinuta" type="button">Copiar texto</button></div>
+  </div>
+  <details class="bloco" id="analise-2025-2026">
+    <summary>Análise detalhada de 08/2025 a 09/2026 (preparada em 12/11/2026)</summary>
+    <div class="texto">
+      <p>Leitura dos 14 balancetes, com conferência centavo a centavo dos totais. Os valores abaixo são fixos para esse período; os alertas e o painel continuam se atualizando com os meses novos.</p>
+      <h3>1. Caixa</h3>
+      <ul>
+        <li>O saldo chegou a R$ 123.529,28 em 30/11/2025 e virou negativo de abril a julho de 2026, com mínimo de −R$ 8.840,10 em 31/05/2026. Em 30/09/2026 o saldo era de R$ 5.771,29.</li>
+        <li>A aplicação RDC (R$ 100.668,59 em 31/12/2025) foi resgatada por completo até março de 2026.</li>
+        <li>No acumulado, receitas de R$ 1.412.443,35 contra despesas de R$ 1.406.672,06: o condomínio gastou praticamente tudo o que arrecadou e não formou reserva.</li>
+      </ul>
+      <h3>2. Investimentos pagos com a taxa ordinária</h3>
+      <ul>
+        <li>Obras e imobilizado somam R$ 286.250,04, dos quais R$ 202.148,22 entre 09/2025 e 02/2026. Não há receita de taxa extra nem de fundo de reserva nos balancetes.</li>
+        <li>Amper Tecnologia recebeu R$ 158.465,23 no período. Só controle de acesso, rede e fechaduras: R$ 91.800,00. Leitores faciais aparecem em três frentes (R$ 9.000,00 em dez/2025, R$ 7.000,00 em jan/2026 e 5 × R$ 2.400,00 de abr a ago/2026, total R$ 28.000,00), além de R$ 3.300,00 pagos a Caio Oliveira por pontos elétricos para os leitores.</li>
+        <li>Pedir contratos, orçamentos concorrentes e as atas que aprovaram esses gastos.</li>
+      </ul>
+      <h3>3. Possíveis pagamentos em dobro ou documentos reaproveitados</h3>
+      <ul>
+        <li>Paulo Sérgio (bombas), NF 2487: R$ 1.430,25 pagos duas vezes em 25/09/2026. A administradora diz que será devolvido; cobrar o comprovante.</li>
+        <li>Qualyservice (jardins), NF 88 ref. 02/2026: R$ 3.500,00 pagos em 02/02/2026 e de novo em 04/03/2026.</li>
+        <li>Amper (manutenção mensal de R$ 1.500,00): NF 2710 em out e nov/2025, NF 2948 em fev e abr/2026, NF 3123 em jul e ago/2026. Não há pagamento em jun/2026.</li>
+        <li>Duos Síndicos: NF 382 em jul e ago/2026. Pago R$ 4.250,00 em jun, R$ 4.375,00 em jul e R$ 4.571,87 em ago e set, para NF de R$ 4.375,00.</li>
+        <li>Hebert Gomes Dias, fachada do salão: R$ 1.800,00 em dez/2025 (NF 189) e mais 3 × R$ 666,67 em fev–abr/2026 (NF 189/219, uma sem documento).</li>
+        <li>Coelba: UC 7092603606 ref. 06/2026 paga em jul (R$ 509,15) e ago/2026 (R$ 509,41); UC 7095775629 ref. 12/2025 com duas faturas de R$ 108,43 em jan/2026.</li>
+      </ul>
+      <h3>4. Parcelamentos e contas que pararam de aparecer</h3>
+      <ul>
+        <li>Seguro Allianz: só a parcela 01/06 (R$ 653,94, out/2025). O seguro é obrigatório; confirmar se a apólice está vigente.</li>
+        <li>Equipamentos via Logoserv (impressora, notebook, micro-ondas, celular, ar): parcelas 01 e 02 de 05 em out e nov/2025, nada depois.</li>
+        <li>Toldos Celia Xisto: NF 951 com cinco pagamentos (parcelas 02/03 e 03/03 repetidas, R$ 19.200,11) e NF 1008 só com as parcelas 04 a 06 de 07.</li>
+        <li>Internet (Enterprise) sem pagamento em ago e set/2026; extintores na parcela 02/04 em ago/2026.</li>
+        <li>As três unidades de energia de maior consumo (7095782668, 7095782820 e 7095783532) somem a partir de jul/2026 e surge a UC 7100077374 (797 kWh). Verificar faturas em aberto.</li>
+      </ul>
+      <h3>5. Pessoal e tributos</h3>
+      <ul>
+        <li>Logoserv/Logo RH: R$ 463.189,01. As faturas de mai e jun/2026 foram parceladas (R$ 20.000,00 em jun e o restante embutido em ago e set).</li>
+        <li>Confirmar as guias de retenção (INSS, PIS/COFINS/CSLL) das NFs Logoserv 7986, 36343, 36989 e 37080, que não têm DARF correspondente nos balancetes.</li>
+        <li>Em mar/2026 a Qualyservice (R$ 10.056,59, "serviço de mensageira") foi lançada em Obras; é custo de mão de obra.</li>
+      </ul>
+      <h3>6. Consumo</h3>
+      <ul>
+        <li>Água (Embasa): R$ 175.471,09 em 9 faturas, sempre perto de R$ 19,5 mil, sem relação com o volume (262 m³ custaram R$ 19.055,07 e 1.546 m³, R$ 19.422,55). Pedir à Embasa o detalhamento da tarifa e o número de economias.</li>
+      </ul>
+      <h3>7. Custos que poderiam ser evitados</h3>
+      <ul>
+        <li>Juros e IOF bancários de R$ 2.652,82 (inclui R$ 706,34 de juros de cartão de crédito em mai e jun/2026) e R$ 567,66 de multas por atraso declaradas nas notas.</li>
+        <li>Assessoria jurídica: R$ 49.391,96; passou de R$ 2.000,00/mês no fim de 2025 para R$ 4.500 a R$ 5.600 em 2026, com duas faturas de referência 04/2026 (NFs 3598 e 3689).</li>
+      </ul>
+      <h3>8. Receita</h3>
+      <ul>
+        <li>A arrecadação principal subiu de R$ 104.128,84 para R$ 130.550,00 em ago/2026 (+25,4%). O valor fixo todo mês sugere cobrança garantida pela Logo (taxa de 2,5%); confirmar no contrato quem assume a inadimplência.</li>
+        <li>Locação de equipamentos Sapucaúna desde jul/2026 (R$ 5.931,26): pedir contrato e a lista dos equipamentos.</li>
+      </ul>
+    </div>
+  </details>
+</section>
+
+<section data-aba="dados" hidden>
+  <h2>Importar balancetes em PDF</h2>
+  <div class="drop" id="drop">
+    <svg width="40" height="40" viewBox="0 0 40 40" aria-hidden="true"><rect x="9" y="5" width="22" height="30" rx="3" fill="none" stroke="var(--accent)" stroke-width="2"/><path d="M20 26V14M15 19l5-5 5 5" fill="none" stroke="var(--accent)" stroke-width="2" stroke-linecap="round"/></svg>
+    <strong>Arraste os PDFs do "Demonstrativo de Receitas e Despesas" da Logo aqui</strong>
+    <span class="small muted">ou</span>
+    <label class="btn" for="arquivos" style="display:inline-block;cursor:pointer;border-radius:8px;padding:8px 14px;background:var(--accent);color:var(--surface);font-weight:600;font-size:.86rem">Escolher arquivos</label>
+    <input type="file" id="arquivos" accept="application/pdf,.pdf" multiple hidden>
+    <span class="small muted">Cada PDF é lido no seu navegador, conferido contra os totais do próprio balancete e guardado pelo mês de referência. Reimportar um mês substitui a versão anterior.</span>
+  </div>
+  <div class="log" id="log"></div>
+
+  <div class="card">
+    <div class="cab"><h3>Meses guardados</h3><span class="small muted" id="resumoBase"></span></div>
+    <div class="tabela" style="margin-top:10px"><table id="tabMeses"></table></div>
+  </div>
+
+  <div class="card" style="display:grid;gap:12px">
+    <h3>Publicar no GitHub (deixa os meses novos visíveis para todos)</h3>
+    <p class="small muted">Meses importados ficam guardados neste navegador. Para que apareçam no site para todo o conselho, publique a base no repositório. É preciso um token do GitHub com permissão de escrita em "Contents" só neste repositório; ele fica salvo apenas neste navegador.</p>
+    <div class="form">
+      <label>Usuário/organização<input type="text" id="ghOwner" autocomplete="off"></label>
+      <label>Repositório<input type="text" id="ghRepo" autocomplete="off"></label>
+      <label>Branch<input type="text" id="ghBranch" autocomplete="off" placeholder="main"></label>
+      <label>Token<input type="password" id="ghToken" autocomplete="off" placeholder="github_pat_…"></label>
+    </div>
+    <div class="acoes">
+      <button class="btn" id="btnPublicar" type="button">Publicar base no GitHub</button>
+      <button class="btn sec" id="btnExportar" type="button">Baixar base (JSON)</button>
+      <label class="btn sec" for="importJson" style="cursor:pointer;border:1px solid var(--accent);border-radius:8px;padding:8px 14px;font-weight:600;font-size:.86rem;color:var(--accent)">Carregar base (JSON)</label>
+      <input type="file" id="importJson" accept="application/json,.json" hidden>
+      <button class="btn perigo" id="btnLimpar" type="button">Descartar meses não publicados</button>
+    </div>
+    <div id="confirmaLimpar" class="acoes small" hidden>Descartar os meses importados só neste navegador? <button class="btn perigo" id="simLimpar" type="button">Descartar</button><button class="btn sec" id="naoLimpar" type="button">Cancelar</button></div>
+  </div>
+</section>
+
+</div></main>
+<div class="toast" id="toast" hidden></div>
+<script type="module" src="js/app.mjs"></script>
+</body>
+</html>
