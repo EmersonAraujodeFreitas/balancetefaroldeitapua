@@ -27,6 +27,7 @@ Settings → Pages → *Deploy from a branch* → `main` / `(root)`.
 - `js/analise.mjs` – indicadores e regras de alerta
 - `js/app.mjs` – telas, importação e publicação
 - `js/executivo.mjs` – análises executivas e gráficos comparativos
+- `js/gestao.mjs` – relatório do mês, projeção de caixa, ficha de fornecedor, mapa de calor e acompanhamento dos alertas
 - `js/app.js` e `js/base.js` – gerados por `python3 build.py` a partir dos `.mjs` (o site carrega estes dois, por isso também abre direto do computador)
 - `img/` – logo do condomínio
 - `js/vendor/` – PDF.js 6.2.108 (Apache-2.0)

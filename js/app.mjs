@@ -1,12 +1,13 @@
 import { lerBalancete, conferir } from "./parser.mjs";
 import { renderExecutivo } from "./executivo.mjs";
+import { renderMes, renderProjecao, renderFornecedor, mapaCalor, SITUACOES, chaveAlerta } from "./gestao.mjs";
 import { rotuloMes, r2, lancamentos, resumoMensal, porCategoria, porFornecedor, parcelas, indicadores, alertas } from "./analise.mjs";
 
 const $ = (s) => document.querySelector(s);
 const brl = (v) => (v ?? 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 const pct = (v) => (v * 100).toFixed(1).replace(".", ",") + "%";
 const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
-const LS_MESES = "farol.balancetes.locais.v1", LS_GH = "farol.github.v1", LS_PER = "farol.periodo.v1";
+const LS_ACOMP = "farol.acompanhamento.v1", LS_MESES = "farol.balancetes.locais.v1", LS_GH = "farol.github.v1", LS_PER = "farol.periodo.v1";
 const ls = {
   get(k, d) { try { const v = localStorage.getItem(k); return v ? JSON.parse(v) : d; } catch { return d; } },
   set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); return true; } catch { return false; } },
@@ -23,8 +24,10 @@ async function carregarBase() {
     if (!r.ok) throw new Error(r.status);
     const j = await r.json();
     S.base = j.meses || {};
+    S.acompBase = j.acompanhamento || {};
   } catch { S.base = (window.__BASE_BALANCETES__ && window.__BASE_BALANCETES__.meses) || {}; }
   S.locais = ls.get(LS_MESES, {});
+  S.acomp = { ...(S.acompBase || (window.__BASE_BALANCETES__ && window.__BASE_BALANCETES__.acompanhamento) || {}), ...ls.get(LS_ACOMP, {}) };
   juntar();
 }
 function juntar() {
@@ -66,7 +69,10 @@ function render() {
     for (const id of ["#kpis", "#grafMensal", "#leitura", "#miniCats", "#tabMensal"]) $(id).innerHTML = "";
     $("#kpis").innerHTML = `<div class="vazio card">Nenhum balancete carregado. Importe os PDFs na aba <a href="#dados">Importar PDF</a>.</div>`;
   } else {
+    A.forEach((a) => { a.chave = chaveAlerta(a); a.sit = (S.acomp[a.chave] || {}).status || "pendente"; });
     painel(); renderExecutivo(S.meses, $("#secAnalises")); categorias(); fornecedores(); listaAlertas(); tabParcelas(); notas(); conselho();
+    renderMes(S.todos, S.mesSel || S.meses.at(-1).mes, alertas(S.todos), $("#secMes"));
+    renderProjecao(S.todos, $("#secProjecao"));
   }
   lancTab(); dadosTab();
 }
@@ -203,17 +209,7 @@ function categorias() {
   const ms = S.meses.map((b) => b.mes);
   const med = (a) => { const s = [...a].sort((x, y) => x - y); const h = s.length >> 1; return s.length ? (s.length % 2 ? s[h] : (s[h - 1] + s[h]) / 2) : 0; };
   const totMes = Object.fromEntries(ms.map((m) => [m, S.meses.find((b) => b.mes === m).totais.despesas]));
-  let h = `<thead><tr><th>Categoria</th>${ms.map((m) => `<th class="n">${rotuloMes(m)}</th>`).join("")}<th class="n">Total</th><th class="n">%</th></tr></thead><tbody>`;
-  const totalGeral = cats.reduce((s, c) => s + c.total, 0);
-  for (const c of cats) {
-    const vals = ms.map((m) => c.porMes[m] || 0), md = med(vals.filter(Boolean));
-    h += `<tr><td>${esc(c.cat)}</td>${vals.map((v) => {
-      const alto = md > 1000 && v > md * 1.8 && v - md > 5000;
-      return `<td class="n" style="${alto ? "background:var(--warn-soft);color:var(--warn);font-weight:600" : ""}">${v ? brl(v).replace("R$", "").trim() : "–"}</td>`;
-    }).join("")}<td class="n"><b>${brl(c.total)}</b></td><td class="n mini">${pct(totalGeral ? c.total / totalGeral : 0)}</td></tr>`;
-  }
-  h += `<tr class="total"><td>Total</td>${ms.map((m) => `<td class="n">${brl(totMes[m]).replace("R$", "").trim()}</td>`).join("")}<td class="n">${brl(totalGeral)}</td><td></td></tr></tbody>`;
-  $("#tabCats").innerHTML = h;
+  $("#tabCats").innerHTML = mapaCalor(S.meses);
   // barras horizontais
   const W = 1040, lh = 34, ml = 240, H = cats.length * lh + 10, max = cats[0]?.total || 1;
   let g = "";
@@ -229,9 +225,10 @@ function fornecedores() {
   const q = $("#buscaForn").value.trim().toLowerCase();
   const fs = porFornecedor(S.meses), tot = fs.reduce((s, f) => s + f.total, 0), nm = S.meses.length;
   const lin = fs.filter((f) => !q || f.forn.toLowerCase().includes(q)).map((f, i) => `<tr>
-    <td class="n mini">${i + 1}</td><td><button class="link" data-forn="${esc(f.forn)}">${esc(f.forn)}</button><div class="mini">${esc([...f.cats].join(" · "))}</div></td>
+    <td class="n mini">${i + 1}</td><td><button class="link" data-detalhe-forn="${esc(f.forn)}">${esc(f.forn)}</button> <button class="link mini" data-forn="${esc(f.forn)}">lançamentos</button><div class="mini">${esc([...f.cats].join(" · "))}</div></td>
     <td class="n">${brl(f.total)}</td><td class="n mini">${pct(f.total / tot)}</td><td class="n">${f.n}</td><td class="n">${f.meses.size}/${nm}</td>
     <td class="n">${brl(f.total / f.meses.size)}</td><td class="n mini">${rotuloMes(f.primeiro)} – ${rotuloMes(f.ultimo)}</td></tr>`).join("");
+  renderFornecedor(S.meses, S.fornSel, S.alertas, $("#fichaForn"));
   $("#tabForn").innerHTML = `<thead><tr><th class="n">#</th><th>Fornecedor</th><th class="n">Total</th><th class="n">%</th><th class="n">Lanç.</th><th class="n">Meses</th><th class="n">Média/mês pago</th><th class="n">Período</th></tr></thead><tbody>${lin}</tbody>`;
 }
 
@@ -239,16 +236,45 @@ function fornecedores() {
 const SEV = { alta: "Alta", media: "Média", baixa: "Baixa", info: "Informativo" };
 function listaAlertas() {
   const A = S.alertas;
+  S.sit ||= new Set(Object.keys(SITUACOES));
   $("#filtroSev").innerHTML = Object.entries(SEV).map(([k, t]) => `<button type="button" class="chip" data-sev="${k}" aria-pressed="${S.sev.has(k)}">${t} · ${A.filter((a) => a.sev === k).length}</button>`).join("");
+  $("#filtroSit").innerHTML = Object.entries(SITUACOES).map(([k, t]) => `<button type="button" class="chip" data-sit="${k}" aria-pressed="${S.sit.has(k)}">${t} · ${A.filter((a) => a.sit === k).length}</button>`).join("");
   $("#sevbar").innerHTML = A.length ? Object.keys(SEV).map((k) => { const n = A.filter((a) => a.sev === k).length; return n ? `<span class="${k}" style="width:${(n / A.length) * 100}%" title="${SEV[k]}: ${n}"></span>` : ""; }).join("") : "";
-  const vis = A.filter((a) => S.sev.has(a.sev));
-  $("#listaAlertas").innerHTML = vis.length ? vis.map((a, i) => `<article class="alerta ${a.sev}">
-    <div class="linha1"><span class="pill ${a.sev}">${SEV[a.sev]}</span><span class="eyebrow">${esc(a.tipo)}</span>${a.mes ? `<span class="mini">${rotuloMes(a.mes)}</span>` : ""}</div>
+  const cont = (k) => A.filter((a) => a.sit === k).length;
+  const abertos = A.filter((a) => (a.sev === "alta" || a.sev === "media") && (a.sit === "pendente" || a.sit === "questionado")).length;
+  $("#kpisAcomp").innerHTML = [
+    ["Em aberto (alta e média)", abertos, "pendentes ou aguardando resposta", abertos ? "neg" : "pos"],
+    ["Questionados", cont("questionado"), "enviados à administradora", ""],
+    ["Respondidos", cont("respondido"), "aguardando análise do conselho", ""],
+    ["Resolvidos ou sem procedência", cont("resolvido") + cont("descartado"), `de ${A.length} alertas`, "pos"],
+  ].map(([t, v, d, c]) => `<div class="kpi ${c}"><span class="eyebrow">${t}</span><b>${v}</b><span class="det">${d}</span></div>`).join("");
+  const vis = A.filter((a) => S.sev.has(a.sev) && S.sit.has(a.sit));
+  $("#listaAlertas").innerHTML = vis.length ? vis.map((a) => {
+    const ac = S.acomp[a.chave] || {};
+    return `<article class="alerta ${a.sev}">
+    <div class="linha1"><span class="pill ${a.sev}">${SEV[a.sev]}</span><span class="eyebrow">${esc(a.tipo)}</span>${a.mes ? `<span class="mini">${rotuloMes(a.mes)}</span>` : ""}<span class="sit ${a.sit}" style="margin-left:auto">${SITUACOES[a.sit]}</span></div>
     <div class="tit">${esc(a.titulo)}</div>
     ${a.detalhe ? `<pre>${esc(a.detalhe)}</pre>` : ""}
     ${a.pergunta ? `<div class="perg">${esc(a.pergunta)}</div>` : ""}
     ${a.ids.length ? `<div><button type="button" class="link" data-alerta="${A.indexOf(a)}">Ver ${a.ids.length} lançamento(s)</button></div>` : ""}
-  </article>`).join("") : `<div class="vazio card">Nenhum alerta com os filtros escolhidos.</div>`;
+    <div class="acomp">
+      <label class="small" style="display:grid;gap:4px;font-weight:600">Situação
+        <select data-acomp="${a.chave}" aria-label="Situação do alerta">${Object.entries(SITUACOES).map(([k, t]) => `<option value="${k}" ${a.sit === k ? "selected" : ""}>${t}</option>`).join("")}</select></label>
+      <label class="small" style="display:grid;gap:4px;font-weight:600">Resposta da administradora / anotação do conselho${ac.data ? ` <span class="mini" style="font-weight:400">atualizado em ${esc(ac.data)}</span>` : ""}
+        <textarea data-resp="${a.chave}" rows="2" placeholder="Registre aqui a resposta recebida ou a providência combinada">${esc(ac.resposta || "")}</textarea></label>
+    </div>
+  </article>`; }).join("") : `<div class="vazio card">Nenhum alerta com os filtros escolhidos.</div>`;
+}
+function salvarAcomp(chave, campo, valor) {
+  const atual = S.acomp[chave] || {};
+  S.acomp[chave] = { ...atual, [campo]: valor, data: new Date().toLocaleDateString("pt-BR") };
+  ls.set(LS_ACOMP, S.acomp);
+}
+function csvAlertas() {
+  const c = (v) => `"${String(v ?? "").replace(/"/g, '""')}"`;
+  const linhas = [["Prioridade", "Tipo", "Mês", "Alerta", "Detalhe", "Pergunta", "Situação", "Resposta/anotação", "Atualizado em"].map(c).join(";")];
+  for (const a of S.alertas) { const ac = S.acomp[a.chave] || {}; linhas.push([SEV[a.sev], a.tipo, a.mes ? rotuloMes(a.mes) : "", a.titulo, a.detalhe, a.pergunta, SITUACOES[a.sit], ac.resposta || "", ac.data || ""].map(c).join(";")); }
+  baixar("alertas-conselho-fiscal.csv", "﻿" + linhas.join("\r\n"), "text/csv;charset=utf-8");
 }
 
 // ---------------------------------------------------------------- parcelas
@@ -282,7 +308,7 @@ function lancTab() {
     (!q || `${d.desc} ${d.nf} ${d.forn} ${d.ref} ${d.baixa}`.toLowerCase().includes(q)));
   if (S.ids) { const set = new Set(S.ids); F = F.filter((d) => set.has(d.id)); }
   $("#filtroIds").hidden = !S.ids;
-  $("#filtroIds").innerHTML = S.ids ? `Mostrando os lançamentos de um alerta. <button class="link" type="button" id="limparIds">Mostrar todos</button>` : "";
+  $("#filtroIds").innerHTML = S.ids ? `Mostrando uma seleção de lançamentos. <button class="link" type="button" id="limparIds">Mostrar todos</button>` : "";
   S.filtrados = F;
   $("#resumoLanc").textContent = `${F.length} lançamentos · ${brl(F.reduce((s, d) => s + d.v, 0))}`;
   const vis = F.slice(0, S.limite);
@@ -318,8 +344,8 @@ function conselho() {
   const ind = S.ind, A = S.alertas, de = S.meses[0].mes, ate = S.meses.at(-1).mes;
   const per = `${rotuloMes(de)} a ${rotuloMes(ate)}`;
   $("#periodoConselho").textContent = `Período: ${per}`;
-  const perguntas = [...new Set(A.filter((a) => a.sev === "alta" || a.sev === "media").map((a) => a.pergunta).filter(Boolean))];
-  $("#roteiro").innerHTML = perguntas.map((p) => `<li>${esc(p)}</li>`).join("");
+  const abertos = A.filter((a) => (a.sev === "alta" || a.sev === "media") && a.pergunta && a.sit !== "resolvido" && a.sit !== "descartado");
+  $("#roteiro").innerHTML = abertos.map((a) => `<li>${esc(a.pergunta)} <span class="sit ${a.sit}">${SITUACOES[a.sit]}</span>${(S.acomp[a.chave] || {}).resposta ? `<div class="mini">Resposta: ${esc(S.acomp[a.chave].resposta)}</div>` : ""}</li>`).join("") || "<li>Nenhuma pergunta em aberto.</li>";
   const docs = new Set([
     "Extratos bancários de todas as contas (corrente, conta capital e aplicação) de cada mês, para conferir os saldos do balancete.",
     "Notas fiscais e comprovantes de pagamento dos maiores fornecedores do período.",
@@ -414,7 +440,7 @@ function dadosTab() {
 function baseCompleta() {
   const meses = {};
   for (const b of S.todos) { const c = { ...b }; c.origem = "base"; meses[b.mes] = c; }
-  return { versao: 1, atualizado: new Date().toLocaleDateString("pt-BR"), meses };
+  return { versao: 1, atualizado: new Date().toLocaleDateString("pt-BR"), meses, acompanhamento: S.acomp || {} };
 }
 const b64 = (s) => { const bytes = new TextEncoder().encode(s); let bin = ""; for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode(...bytes.subarray(i, i + 0x8000)); return btoa(bin); };
 async function publicar() {
@@ -439,11 +465,17 @@ async function publicar() {
 }
 
 // ---------------------------------------------------------------- navegação e eventos
-const ABAS = ["painel", "analises", "categorias", "fornecedores", "alertas", "parcelas", "lancamentos", "notas", "conselho", "dados"];
+const ABAS = ["painel", "analises", "mes", "projecao", "categorias", "fornecedores", "alertas", "parcelas", "lancamentos", "notas", "conselho", "dados"];
 function rota() {
   const a = ABAS.includes(location.hash.slice(1)) ? location.hash.slice(1) : "painel";
   document.querySelectorAll("section[data-aba]").forEach((s) => (s.hidden = s.dataset.aba !== a));
-  document.querySelectorAll("nav.abas a").forEach((l) => l.getAttribute("href") === `#${a}` ? l.setAttribute("aria-current", "page") : l.removeAttribute("aria-current"));
+  let grupo = "";
+  for (const el of document.querySelectorAll(".menu > *")) {
+    if (el.classList.contains("grupo")) { grupo = el.textContent; continue; }
+    const ativo = el.getAttribute("href") === `#${a}`;
+    ativo ? el.setAttribute("aria-current", "page") : el.removeAttribute("aria-current");
+    if (ativo) { $("#tituloPagina").textContent = el.querySelector("span").textContent; $("#grupoPagina").textContent = grupo; }
+  }
 }
 window.addEventListener("hashchange", () => { rota(); window.scrollTo(0, 0); });
 
@@ -457,11 +489,26 @@ $("#maisLanc").addEventListener("click", () => { S.limite += 300; lancTab(); });
 $("#btnCsv").addEventListener("click", csv);
 document.addEventListener("click", (e) => {
   const t = e.target.closest("button"); if (!t) return;
+  if (t.dataset.sit) { S.sit.has(t.dataset.sit) ? S.sit.delete(t.dataset.sit) : S.sit.add(t.dataset.sit); listaAlertas(); }
+  if (t.dataset.mes !== undefined && t.dataset.mes) { S.mesSel = t.dataset.mes; renderMes(S.todos, S.mesSel, alertas(S.todos), $("#secMes")); window.scrollTo(0, 0); }
+  if (t.dataset.detalheForn) { S.fornSel = t.dataset.detalheForn; fornecedores(); location.hash = "#fornecedores"; window.scrollTo(0, 0); }
+  if (t.id === "btnCsvAlertas") csvAlertas();
   if (t.dataset.sev) { S.sev.has(t.dataset.sev) ? S.sev.delete(t.dataset.sev) : S.sev.add(t.dataset.sev); listaAlertas(); }
   if (t.dataset.alerta) { S.ids = S.alertas[+t.dataset.alerta].ids; $("#buscaLanc").value = ""; $("#fCat").value = ""; $("#fForn").value = ""; $("#fSemDoc").checked = false; lancTab(); location.hash = "#lancamentos"; }
   if (t.id === "limparIds") { S.ids = null; lancTab(); }
   if (t.dataset.forn) { S.ids = null; $("#buscaLanc").value = ""; lancTab(); $("#fForn").value = t.dataset.forn; lancTab(); location.hash = "#lancamentos"; }
   if (t.dataset.remover) { delete S.locais[t.dataset.remover]; ls.set(LS_MESES, S.locais); juntar(); render(); }
+});
+document.addEventListener("change", (e) => {
+  const t = e.target;
+  if (t.id === "selMes") { S.mesSel = t.value; renderMes(S.todos, S.mesSel, alertas(S.todos), $("#secMes")); }
+  if (t.id === "selForn") { S.fornSel = t.value; renderFornecedor(S.meses, S.fornSel, S.alertas, $("#fichaForn")); }
+  if (t.dataset.acomp) { salvarAcomp(t.dataset.acomp, "status", t.value); render(); toast("Situação do alerta atualizada."); }
+  if (t.dataset.resp) { salvarAcomp(t.dataset.resp, "resposta", t.value); toast("Anotação salva neste navegador. Publique a base para compartilhar."); }
+});
+document.addEventListener("click", (e) => {
+  const l = e.target.closest("a[data-filtra-mes]"); if (!l) return;
+  S.ids = lancamentos(S.todos).filter((d) => d.mes === l.dataset.filtraMes).map((d) => d.id); lancTab();
 });
 $("#arquivos").addEventListener("change", (e) => { if (e.target.files.length) importar([...e.target.files]); e.target.value = ""; });
 const drop = $("#drop");

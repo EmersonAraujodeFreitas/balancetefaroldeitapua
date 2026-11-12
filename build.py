@@ -2,7 +2,7 @@
 import re, json, os
 d = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'js')
 partes = []
-for f in ['parser.mjs', 'analise.mjs', 'executivo.mjs', 'app.mjs']:
+for f in ['parser.mjs', 'analise.mjs', 'executivo.mjs', 'gestao.mjs', 'app.mjs']:
     s = open(os.path.join(d, f)).read()
     s = re.sub(r'^import [^;]+;\n', '', s, flags=re.M)
     s = re.sub(r'^export (async function|function|const|let)', r'\1', s, flags=re.M)

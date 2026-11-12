@@ -109,11 +109,12 @@ function custosFinanceiros(meses) {
   const juros = [], iof = [], iofAplic = [], jurosCartao = [];
   for (const b of meses) {
     const temJuros = b.despesas.some((d) => /^JUROS/i.test(d.desc));
-    for (const d of b.despesas) {
-      if (/^JUROS/i.test(d.desc)) (/Cart/i.test(d.tipo) ? jurosCartao : juros).push({ ...d, mes: b.mes });
+    b.despesas.forEach((d, i) => {
+      const x = { ...d, mes: b.mes, id: `${b.mes}#${i}` };
+      if (/^JUROS/i.test(d.desc)) (/Cart/i.test(d.tipo) ? jurosCartao : juros).push(x);
       // IOF num mês sem juros vem do resgate de aplicação, não de saldo negativo
-      else if (/^IOF/i.test(d.desc)) (temJuros ? iof : iofAplic).push({ ...d, mes: b.mes });
-    }
+      else if (/^IOF/i.test(d.desc)) (temJuros ? iof : iofAplic).push(x);
+    });
   }
   const multas = [], futuras = [];
   for (const b of meses) for (const n of b.notas || []) {
