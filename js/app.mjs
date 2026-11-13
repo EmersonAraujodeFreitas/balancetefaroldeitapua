@@ -1,6 +1,7 @@
 import { lerBalancete, conferir } from "./parser.mjs";
 import { renderExecutivo } from "./executivo.mjs";
 import { renderMes, renderProjecao, renderFornecedor, mapaCalor, SITUACOES, chaveAlerta } from "./gestao.mjs";
+import { comboMensal, saude, treemapCategorias, listaTendencia, multiplos } from "./graficos.mjs";
 import { rotuloMes, r2, lancamentos, resumoMensal, porCategoria, porFornecedor, parcelas, indicadores, alertas } from "./analise.mjs";
 
 const $ = (s) => document.querySelector(s);
@@ -134,7 +135,9 @@ function painel() {
     ["Alertas de prioridade alta", String(S.alertas.filter((a) => a.sev === "alta").length), `${S.alertas.filter((a) => a.sev === "media").length} de prioridade média`, S.alertas.some((a) => a.sev === "alta") ? "neg" : "pos"],
   ];
   $("#kpis2").innerHTML = k2.map(([t, v, d, c]) => `<div class="kpi ${c}"><span class="eyebrow">${t}</span><b>${v}</b><span class="det">${d}</span></div>`).join("");
-  $("#grafMensal").innerHTML = graficoMensal(rm);
+  $("#grafMensal").innerHTML = comboMensal(rm);
+  const sd = saude(S.meses, S.alertas);
+  $("#saude").innerHTML = sd.html;
 
   const L = [];
   const def = rm.filter((m) => m.resultado < 0);
@@ -154,53 +157,14 @@ function painel() {
   $("#topAlertas").innerHTML = top.length ? top.map((a) => `<a href="#alertas"><span class="pill alta">${esc(a.tipo)}</span><span class="t">${esc(a.titulo)}</span></a>`).join("")
     : `<p class="muted small">Nenhum alerta de prioridade alta no período.</p>`;
 
-  const max = ind.cats[0]?.total || 1;
-  $("#miniCats").innerHTML = `<table><thead><tr><th>Categoria</th><th style="width:40%"></th><th class="n">Valor</th><th class="n">Participação</th></tr></thead><tbody>${ind.cats.map((c) => `<tr><td>${esc(c.cat)}</td><td><div class="barra"><span style="width:${(c.total / max) * 100}%"></span></div></td><td class="n">${brl(c.total)}</td><td class="n mini">${pct(c.total / ind.despesa)}</td></tr>`).join("")}</tbody></table>`;
+  $("#treemap").innerHTML = treemapCategorias(S.meses);
+  $("#miniCats").innerHTML = listaTendencia(S.meses);
 
   const linhas = rm.map((m) => `<tr><td>${rotuloMes(m.mes)}${S.meses.find((b) => b.mes === m.mes).origem === "local" ? ' <span class="pill local">não publicado</span>' : ""}</td>
     <td class="n">${brl(m.receita)}</td><td class="n">${brl(m.despesa)}</td><td class="n ${m.resultado < 0 ? "neg" : ""}">${brl(m.resultado)}</td>
     <td class="n ${m.saldo < 0 ? "neg" : ""}">${brl(m.saldo)}</td><td class="n">${pct(m.receita ? m.despesa / m.receita : 0)}</td></tr>`).join("");
   $("#tabMensal").innerHTML = `<thead><tr><th>Mês</th><th class="n">Receita</th><th class="n">Despesa</th><th class="n">Resultado</th><th class="n">Saldo final</th><th class="n">Despesa/receita</th></tr></thead>
     <tbody>${linhas}<tr class="total"><td>Total</td><td class="n">${brl(ind.receita)}</td><td class="n">${brl(ind.despesa)}</td><td class="n ${ind.resultado < 0 ? "neg" : ""}">${brl(ind.resultado)}</td><td class="n">${brl(ind.saldoFinal)}</td><td class="n">${pct(ind.receita ? ind.despesa / ind.receita : 0)}</td></tr></tbody>`;
-}
-
-function escalaBonita(min, max, n = 5) {
-  const span = max - min || 1;
-  const passo0 = span / n, p10 = 10 ** Math.floor(Math.log10(passo0));
-  const passo = [1, 2, 2.5, 5, 10].map((m) => m * p10).find((p) => p >= passo0);
-  const lo = Math.floor(min / passo) * passo, hi = Math.ceil(max / passo) * passo;
-  const ticks = []; for (let v = lo; v <= hi + 1e-9; v += passo) ticks.push(r2(v));
-  return { lo, hi, ticks };
-}
-const curto = (v) => Math.abs(v) >= 1000 ? (v / 1000).toLocaleString("pt-BR", { maximumFractionDigits: 0 }) + " mil" : v.toLocaleString("pt-BR");
-
-function graficoMensal(rm) {
-  const W = 1040, H = 360, ml = 66, mr = 16, mt = 22, mb = 34;
-  const vals = rm.flatMap((m) => [m.receita, m.despesa, m.saldo, 0]);
-  const { lo, hi, ticks } = escalaBonita(Math.min(...vals), Math.max(...vals));
-  const y = (v) => mt + (H - mt - mb) * (1 - (v - lo) / (hi - lo));
-  const bw = (W - ml - mr) / rm.length, gap = Math.max(3, bw * 0.2), b = (bw - gap * 2) / 2;
-  let g = "";
-  if (lo < 0) g += `<rect x="${ml}" y="${y(0)}" width="${W - ml - mr}" height="${y(lo) - y(0)}" fill="var(--crit-soft)" opacity=".7"/>`;
-  for (const t of ticks) g += `<line x1="${ml}" x2="${W - mr}" y1="${y(t)}" y2="${y(t)}" stroke="${t === 0 ? "var(--line-2)" : "var(--line)"}" stroke-width="1"/><text x="${ml - 8}" y="${y(t) + 4}" text-anchor="end">${curto(t)}</text>`;
-  rm.forEach((m, i) => {
-    const x0 = ml + i * bw + gap;
-    g += `<rect x="${x0}" y="${Math.min(y(m.receita), y(0))}" width="${b - 1}" height="${Math.abs(y(0) - y(m.receita))}" fill="var(--accent)" data-tip="${rotuloMes(m.mes)} · receita ${brl(m.receita)}"/>`;
-    g += `<rect x="${x0 + b}" y="${Math.min(y(m.despesa), y(0))}" width="${b - 1}" height="${Math.abs(y(0) - y(m.despesa))}" fill="var(--desp)" data-tip="${rotuloMes(m.mes)} · despesa ${brl(m.despesa)}"/>`;
-    const lab = rm.length > 16 && i % 2 ? "" : rotuloMes(m.mes).replace("/20", "/");
-    g += `<text x="${x0 + b}" y="${H - mb + 18}" text-anchor="middle">${lab}</text>`;
-  });
-  const pts = rm.map((m, i) => [ml + i * bw + bw / 2, y(m.saldo)]);
-  g += `<polyline points="${pts.map((p) => p.join(",")).join(" ")}" fill="none" stroke="var(--gold)" stroke-width="2.5" stroke-linejoin="round"/>`;
-  pts.forEach((p, i) => g += `<circle cx="${p[0]}" cy="${p[1]}" r="${i === pts.length - 1 ? 5 : 3.2}" fill="${rm[i].saldo < 0 ? "var(--crit)" : "var(--gold)"}" stroke="var(--surface)" stroke-width="1.5" data-tip="${rotuloMes(rm[i].mes)} · saldo ${brl(rm[i].saldo)}"/>`);
-  // anotações: menor saldo e saldo atual
-  const iMin = rm.reduce((a, m, i) => (m.saldo < rm[a].saldo ? i : a), 0), iUlt = rm.length - 1;
-  const anot = (i, txt, acima) => {
-    const [x, yy] = pts[i], anc = x > W - 120 ? "end" : x < ml + 60 ? "start" : "middle";
-    return `<text class="anot" x="${x}" y="${acima ? yy - 10 : yy + 18}" text-anchor="${anc}">${txt}</text>`;
-  };
-  if (rm[iMin].saldo < 0 && iMin !== iUlt) g += anot(iMin, `mínimo ${curto(Math.round(rm[iMin].saldo))}`, false);
-  return `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Receitas, despesas e saldo por mês">${g}</svg>`;
 }
 
 // ---------------------------------------------------------------- categorias
@@ -210,14 +174,7 @@ function categorias() {
   const med = (a) => { const s = [...a].sort((x, y) => x - y); const h = s.length >> 1; return s.length ? (s.length % 2 ? s[h] : (s[h - 1] + s[h]) / 2) : 0; };
   const totMes = Object.fromEntries(ms.map((m) => [m, S.meses.find((b) => b.mes === m).totais.despesas]));
   $("#tabCats").innerHTML = mapaCalor(S.meses);
-  // barras horizontais
-  const W = 1040, lh = 34, ml = 240, H = cats.length * lh + 10, max = cats[0]?.total || 1;
-  let g = "";
-  cats.forEach((c, i) => {
-    const w = (W - ml - 120) * (c.total / max);
-    g += `<text x="${ml - 10}" y="${i * lh + 19}" text-anchor="end">${esc(c.cat)}</text><rect x="${ml}" y="${i * lh + 6}" width="${Math.max(1, w)}" height="18" rx="3" fill="var(--accent)" opacity="${1 - i * 0.05}"/><text x="${ml + w + 8}" y="${i * lh + 19}">${brl(c.total)}</text>`;
-  });
-  $("#grafCats").innerHTML = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Despesa total por categoria">${g}</svg>`;
+  $("#grafCats").innerHTML = multiplos(S.meses);
 }
 
 // ---------------------------------------------------------------- fornecedores
@@ -536,6 +493,8 @@ $("#copiarMinuta").addEventListener("click", async () => {
 
 const tip = $("#tip");
 document.addEventListener("mousemove", (e) => {
+  const col = e.target.closest && e.target.closest("svg.combo .col");
+  document.querySelectorAll("svg.combo .guia").forEach((l) => { if (col && l.ownerSVGElement === col.ownerSVGElement) { const x = +col.getAttribute("x") + +col.getAttribute("width") / 2; l.setAttribute("x1", x); l.setAttribute("x2", x); l.setAttribute("opacity", ".6"); } else l.setAttribute("opacity", "0"); });
   const t = e.target.closest && e.target.closest("[data-tip]");
   if (!t) { tip.hidden = true; return; }
   tip.textContent = t.getAttribute("data-tip"); tip.hidden = false;

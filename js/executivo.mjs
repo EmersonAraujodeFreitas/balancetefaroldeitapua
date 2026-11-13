@@ -140,7 +140,7 @@ function empilhado(meses) {
 
 // -------------------------------------------------- acumulado receita x despesa
 function acumulado(meses) {
-  const W = 540, H = 300, ml = 54, mr = 96, mt = 16, mb = 34;
+  const W = 540, H = 300, ml = 54, mr = 116, mt = 16, mb = 34;
   let ar = 0, ad = 0;
   const d = meses.map((b) => ({ mes: b.mes, r: (ar += b.totais.receitas), d: (ad += b.totais.despesas) }));
   const { lo, hi, t } = xEscala(0, Math.max(ar, ad));
@@ -246,26 +246,37 @@ function conclusoes(meses, ci, tf) {
   return out.map((t) => `<li>${t}</li>`).join("");
 }
 
+import { fluxo, pontePeriodo, pareto, formasPagamento } from "./graficos.mjs";
 export function renderExecutivo(meses, el) {
   if (!meses.length) { el.innerHTML = `<div class="vazio card">Nenhum balancete no período.</div>`; return; }
   const ci = correntesInvest(meses), tf = topFornecedores(meses);
+  const par = pareto(meses);
   el.innerHTML = `
   <div class="card"><div class="cab"><div class="cab-secao"><span class="eyebrow">Síntese</span><h2>Conclusões do período</h2></div></div>
     <ul class="conclusoes">${conclusoes(meses, ci, tf)}</ul></div>
   <div class="card"><div class="cab"><div class="cab-secao"><span class="eyebrow">Comparativo</span><h2>Últimos meses x período anterior</h2></div></div>
     <div style="margin-top:14px">${comparativo(meses)}</div></div>
-  <div class="grid2">
-    <div class="card chart"><div class="cab-secao"><span class="eyebrow">Natureza do gasto</span><h2>Gastos correntes x investimentos</h2></div>
-      <div class="legenda" style="margin:10px 0 6px"><span><i style="background:var(--accent)"></i>Gastos correntes</span><span><i style="background:#c98a00"></i>Obras e bens</span><span><i class="linha" style="background:var(--ink)"></i>Receita</span></div>${ci.svg}</div>
-    <div class="card chart"><div class="cab-secao"><span class="eyebrow">Composição</span><h2>Despesas por categoria</h2></div><div style="margin-top:10px">${rosca(meses)}</div></div>
-  </div>
-  <div class="card chart"><div class="cab-secao"><span class="eyebrow">Evolução da composição</span><h2>Despesa mensal por categoria</h2></div><div style="margin-top:10px">${empilhado(meses)}</div></div>
+  <div class="bloco-titulo"><span class="num">1</span><div><h2>Caixa</h2><p>De onde veio e para onde foi cada real</p></div></div>
+  <div class="card chart"><div class="cab-secao"><span class="eyebrow">Fluxo do dinheiro</span><h2>Receitas distribuídas pelas categorias de despesa</h2></div>
+    <p class="small muted" style="margin:6px 0 10px">A largura de cada faixa é proporcional ao valor. Passe o mouse sobre uma faixa para ver o valor.</p><div class="grafico-largo">${fluxo(meses)}</div></div>
+  <div class="card chart"><div class="cab-secao"><span class="eyebrow">Ponte do período</span><h2>Do saldo inicial ao saldo final</h2></div>
+    <div class="legenda" style="margin:10px 0 6px"><span><i style="background:#054166"></i>Saldo</span><span><i style="background:#2a9d8f"></i>Entradas</span><span><i style="background:#d9663a"></i>Saídas por categoria</span></div><div class="grafico-largo">${pontePeriodo(meses)}</div></div>
   <div class="grid2">
     <div class="card chart"><div class="cab-secao"><span class="eyebrow">Acumulado</span><h2>Receita x despesa acumuladas</h2></div>
       <div class="legenda" style="margin:10px 0 6px"><span><i class="linha" style="background:var(--accent)"></i>Receita acumulada</span><span><i class="linha" style="background:#d9663a"></i>Despesa acumulada</span></div>${acumulado(meses)}</div>
+    <div class="card chart"><div class="cab-secao"><span class="eyebrow">Natureza do gasto</span><h2>Gastos correntes x investimentos</h2></div>
+      <div class="legenda" style="margin:10px 0 6px"><span><i style="background:var(--accent)"></i>Gastos correntes</span><span><i style="background:#c98a00"></i>Obras e bens</span><span><i class="linha" style="background:var(--ink)"></i>Receita</span></div>${ci.svg}</div>
+  </div>
+  <div class="bloco-titulo"><span class="num">2</span><div><h2>Composição</h2><p>Como o gasto se divide e como mudou</p></div></div>
+  <div class="grid2">
+    <div class="card chart"><div class="cab-secao"><span class="eyebrow">Participação</span><h2>Despesas por categoria</h2></div><div style="margin-top:10px">${rosca(meses)}</div></div>
     <div class="card chart"><div class="cab-secao"><span class="eyebrow">Tendência</span><h2>O que aumentou e o que caiu</h2></div>${variacaoCategorias(meses)}</div>
   </div>
-  <div class="card chart"><div class="cab-secao"><span class="eyebrow">Concentração</span><h2>Maiores fornecedores do período</h2></div><div style="margin-top:12px">${tf.svg}</div></div>
-  <div class="cab-secao"><span class="eyebrow">Índices de gestão</span><h2>Indicadores por trimestre</h2></div>
+  <div class="card chart"><div class="cab-secao"><span class="eyebrow">Evolução da composição</span><h2>Despesa mensal por categoria</h2></div><div style="margin-top:10px">${empilhado(meses)}</div></div>
+  <div class="bloco-titulo"><span class="num">3</span><div><h2>Fornecedores e pagamentos</h2><p>Quem recebe e como se paga</p></div></div>
+  <div class="card chart"><div class="cab"><div class="cab-secao"><span class="eyebrow">Concentração (curva 80/20)</span><h2>Maiores fornecedores do período</h2></div><span class="small muted">${par.corte} de ${par.nForn} fornecedores concentram 80% dos pagamentos</span></div>
+    <div class="grafico-largo" style="margin-top:12px">${par.svg}</div></div>
+  <div class="card chart"><div class="cab-secao"><span class="eyebrow">Meios de pagamento</span><h2>Como as despesas foram pagas</h2></div><div style="margin-top:12px">${formasPagamento(meses)}</div></div>
+  <div class="bloco-titulo"><span class="num">4</span><div><h2>Índices de gestão</h2><p>Indicadores por trimestre</p></div></div>
   <div class="tabela">${porTrimestre(meses)}</div>`;
 }

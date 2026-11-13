@@ -291,6 +291,69 @@ body { background: #edf3f8; }
   header.top { position: static; } nav.abas, .periodo, .acoes, #btnImprimir { display: none !important; }
   body { background: #fff; } .card, .kpi, .tabela, .alerta { box-shadow: none; break-inside: avoid; }
 }
+
+/* ===== gráficos avançados */
+svg.g { width: 100%; height: auto; display: block; font-family: inherit; }
+svg.g text { font-size: 13px; fill: #3b4d5f; }
+svg.g .eixo-x { font-size: 12.5px; font-weight: 600; fill: #3b4d5f; }
+svg.g .eixo-cat { font-size: 13px; font-weight: 500; fill: #0a1824; }
+svg.g .val { font-size: 11.5px; font-weight: 700; fill: #0a1824; }
+svg.g .zona { font-size: 11.5px; font-weight: 600; fill: #b4231a; }
+svg.g .rot-faixa { font-size: 12px; font-weight: 700; fill: #054166; }
+svg.g .col { fill: transparent; cursor: crosshair; }
+svg.g .col:hover { fill: rgba(5,65,102,.05); }
+svg.g .no-t { font-size: 14px; font-weight: 700; fill: #0a1824; }
+svg.g .no-v { font-size: 12.5px; font-weight: 500; fill: #3b4d5f; }
+svg.g .centro-l { font-size: 12px; fill: #3b4d5f; }
+svg.g .centro-v { font-size: 22px; font-weight: 800; fill: #054166; }
+svg.g .banda { transition: opacity .15s; }
+svg.g .banda:hover { opacity: .6 !important; }
+svg.g .tm rect { transition: filter .15s; }
+svg.g .tm:hover rect { filter: brightness(1.12); }
+.chart svg.g:hover [data-tip]:not(:hover) { opacity: 1; }
+svg.treemap:hover .tm:not(:hover) { opacity: .75; }
+svg.fluxo:hover .banda:not(:hover) { opacity: .15; }
+@media (prefers-reduced-motion: no-preference) {
+  .anim-linha { stroke-dasharray: 1; stroke-dashoffset: 1; animation: traco 1.2s ease-out .2s forwards; }
+  @keyframes traco { to { stroke-dashoffset: 0; } }
+  .anim-bar { transform-box: fill-box; transform-origin: bottom; animation: cresce .6s ease-out both; }
+  @keyframes cresce { from { transform: scaleY(0); } }
+}
+.saude { display: grid; grid-template-columns: minmax(0, 340px) minmax(0, 1fr); gap: 28px; align-items: center; }
+.saude-g { text-align: center; }
+.saude-r { font-size: 1.15rem; font-weight: 800; letter-spacing: .04em; text-transform: uppercase; margin-top: -6px; }
+.saude-l { list-style: none; margin: 0; padding: 0; display: grid; gap: 14px; }
+.saude-l li { display: grid; gap: 4px; }
+.sd-top { display: flex; justify-content: space-between; gap: 10px; font-size: .95rem; color: var(--ink); }
+.sd-barra { height: 10px; background: #e8eef4; border-radius: 5px; overflow: hidden; }
+.sd-barra span { display: block; height: 100%; border-radius: 5px; }
+table.tend { width: 100%; border-collapse: collapse; }
+table.tend th { text-align: left; font-size: .8rem; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); padding: 8px 10px; border-bottom: 2px solid var(--line); background: none; }
+table.tend td { padding: 9px 10px; border-bottom: 1px solid var(--line); vertical-align: middle; }
+table.tend tr:hover td { background: #f6f9fc; }
+.chart svg.spark-cat, .spark-cat { width: 120px !important; height: 34px !important; display: block; }
+.delta { font-size: .85rem; font-weight: 700; white-space: nowrap; }
+.delta.ruim { color: #b4231a; } .delta.bom { color: #1d7a4b; } .delta.neutro { color: var(--muted); font-weight: 500; }
+.share { height: 8px; border-radius: 4px; background: #e8eef4; overflow: hidden; margin-bottom: 3px; }
+.share span { display: block; height: 100%; background: linear-gradient(90deg, #0b5a8c, #054166); border-radius: 4px; }
+.mult { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 14px; }
+.mult-c { border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px 10px; background: #fff; transition: box-shadow .15s, border-color .15s; }
+.mult-c:hover { border-color: #9fc0d8; box-shadow: 0 6px 18px rgba(5,65,102,.10); }
+.mult-c svg { width: 100%; height: auto; display: block; margin: 6px 0 4px; }
+.mult-h { display: flex; justify-content: space-between; gap: 8px; font-size: .92rem; font-weight: 600; color: var(--ink); }
+.mult-h b { color: #054166; }
+.mult-p { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 2px 8px; white-space: nowrap; font-size: .78rem; color: var(--muted); }
+.rosca { display: grid; grid-template-columns: 230px minmax(0, 1fr); gap: 20px; align-items: center; }
+.rosca svg { max-width: 230px; }
+.leg-tab { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.leg-tab li { display: grid; grid-template-columns: 14px minmax(0, 1fr) auto 56px; gap: 10px; align-items: center; font-size: .95rem; padding-bottom: 7px; border-bottom: 1px solid var(--line); }
+.leg-tab i { width: 12px; height: 12px; border-radius: 3px; }
+.leg-tab .v { font-weight: 700; font-variant-numeric: tabular-nums; } .leg-tab .p { text-align: right; color: var(--muted); font-variant-numeric: tabular-nums; }
+.bloco-titulo { display: flex; align-items: center; gap: 12px; margin: 26px 0 4px; }
+.bloco-titulo .num { width: 34px; height: 34px; border-radius: 10px; background: #054166; color: #fbb812; display: grid; place-items: center; font-weight: 800; }
+.bloco-titulo h2 { margin: 0; font-size: 1.25rem; } .bloco-titulo p { margin: 0; color: var(--muted); font-size: .9rem; }
+.grafico-largo { overflow-x: auto; } .grafico-largo > svg { min-width: 720px; }
+@media (max-width: 760px) { .saude, .rosca { grid-template-columns: minmax(0, 1fr); } .saude-g svg { max-width: 300px; margin: 0 auto; } }
 </style>
 </head>
 <body>
@@ -357,14 +420,18 @@ body { background: #edf3f8; }
   <div class="kpis-sec" id="kpis2"></div>
   <div class="card chart">
     <div class="cab"><div class="cab-secao"><span class="eyebrow">Evolução mensal</span><h2>Receitas, despesas e saldo de caixa</h2></div>
-      <div class="legenda"><span><i style="background:var(--accent)"></i>Receita</span><span><i style="background:var(--desp)"></i>Despesa</span><span><i class="linha" style="background:var(--gold)"></i>Saldo no fim do mês</span></div></div>
-    <div id="grafMensal" style="margin-top:12px"></div>
+      <div class="legenda"><span><i style="background:linear-gradient(#1673ad,#054166)"></i>Receita</span><span><i style="background:linear-gradient(#a7b6c6,#7b8ea4)"></i>Despesa</span><span><i class="linha" style="background:var(--gold)"></i>Saldo no fim do mês</span><span><i style="background:#2a9d8f"></i>Sobra</span><span><i style="background:#d9663a"></i>Déficit</span></div></div>
+    <div id="grafMensal" class="grafico-largo" style="margin-top:12px"></div>
   </div>
   <div class="grid2">
     <div class="card"><div class="cab"><div class="cab-secao"><span class="eyebrow">Recalculado a cada balancete</span><h2>Destaques do período</h2></div></div><ul class="leitura" id="leitura" style="margin-top:14px"></ul></div>
     <div class="card"><div class="cab"><div class="cab-secao"><span class="eyebrow">Prioridade alta</span><h2>Pontos de atenção</h2></div><a href="#alertas" class="small">Todos os alertas</a></div><div class="toplista" id="topAlertas" style="margin-top:10px"></div></div>
   </div>
-  <div class="card"><div class="cab"><div class="cab-secao"><span class="eyebrow">Composição</span><h2>Para onde foi o dinheiro</h2></div><a href="#categorias" class="small">Detalhar por mês</a></div><div id="miniCats" style="margin-top:12px;overflow-x:auto"></div></div>
+  <div class="card"><div class="cab"><div class="cab-secao"><span class="eyebrow">Termômetro</span><h2>Índice de saúde financeira</h2></div><span class="small muted">0 a 100 · recalculado a cada balancete</span></div><div id="saude" style="margin-top:12px"></div></div>
+  <div class="card chart"><div class="cab"><div class="cab-secao"><span class="eyebrow">Composição</span><h2>Para onde foi o dinheiro</h2></div><a href="#categorias" class="small">Detalhar por mês</a></div>
+    <p class="small muted" style="margin:6px 0 12px">Cada bloco é proporcional ao valor gasto na categoria. Passe o mouse para ver o valor.</p>
+    <div id="treemap" class="grafico-largo"></div>
+    <div id="miniCats" class="tabela-limpa" style="margin-top:18px;overflow-x:auto"></div></div>
   <div class="cab-secao"><span class="eyebrow">Demonstrativo consolidado</span><h2>Resultado mês a mês</h2></div>
   <div class="tabela"><table id="tabMensal"></table></div>
 </section>
@@ -378,7 +445,7 @@ body { background: #edf3f8; }
 <section data-aba="categorias" hidden>
   <div class="cab"><div class="cab-secao"><span class="eyebrow">Análise vertical</span><h2>Despesas por categoria e mês</h2></div><span class="small muted">Mapa de calor: quanto mais escuro, maior o gasto. Passe o mouse para ver o valor exato.</span></div>
   <div class="tabela"><table id="tabCats"></table></div>
-  <div class="card chart"><h3>Peso de cada categoria no período</h3><div id="grafCats" style="margin-top:10px"></div></div>
+  <div class="card"><div class="cab-secao"><span class="eyebrow">Tendência individual</span><h2>Cada categoria mês a mês</h2></div><p class="small muted" style="margin:6px 0 12px">Linha tracejada dourada = média do período · ponto laranja = pico.</p><div id="grafCats"></div></div>
 </section>
 
 <section data-aba="fornecedores" hidden>
