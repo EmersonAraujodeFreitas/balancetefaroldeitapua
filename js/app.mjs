@@ -1195,11 +1195,13 @@ function prepararAta() {
 }
 
 // ---------------------------------------------------------------- contratos
-function pagoNoMes(forn, mes) { const b = S.todos.find((x) => x.mes === mes); return b ? b.despesas.filter((d) => d.forn === forn).reduce((s2, d) => s2 + d.v, 0) : 0; }
+// filtro opcional: só os lançamentos cujo histórico contém o texto (ex.: "ASSESSORIA"), para não misturar reembolsos
+const normTxt = (t) => String(t || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+function pagoNoMes(forn, mes, filtro) { const b = S.todos.find((x) => x.mes === mes), f = normTxt(filtro).trim(); return b ? b.despesas.filter((d) => d.forn === forn && (!f || normTxt(d.desc).includes(f))).reduce((s2, d) => s2 + d.v, 0) : 0; }
 function analisarContrato(c) {
   const hoje = hojeISO(), tol = (c.tol ?? 2) / 100;
   const ms = S.todos.filter((b) => (!c.inicio || b.mes >= c.inicio) && (!c.fim || b.mes <= c.fim.slice(0, 7)));
-  const meses = ms.map((b) => { const p = r2(pagoNoMes(c.forn, b.mes)); const st = !p ? "ausente" : Math.abs(p - c.valor) <= c.valor * tol ? "ok" : "dif"; return { mes: b.mes, p, st }; });
+  const meses = ms.map((b) => { const p = r2(pagoNoMes(c.forn, b.mes, c.filtro)); const st = !p ? "ausente" : Math.abs(p - c.valor) <= c.valor * tol ? "ok" : "dif"; return { mes: b.mes, p, st }; });
   const ult = meses.at(-1), venceEm = c.fim ? diasEntre(hoje, c.fim) : null;
   return { meses, ult, venceEm, divs: meses.filter((m) => m.st !== "ok").length };
 }
@@ -1225,7 +1227,7 @@ function contratosTab() {
     <div class="kpi ${venc.length ? "neg" : ""}"><span class="eyebrow">Vencendo em 60 dias</span><b>${venc.length}</b><span class="det">avaliar renovação ou cotação</span></div>
   </div>
   ${lista.length ? `<div class="tabela"><table id="tabContratos"><thead><tr><th>Fornecedor</th><th>Objeto</th><th class="n">Valor contratado</th><th>Último mês</th><th class="n">Pago</th><th>Situação</th><th class="n">Meses com diferença</th><th>Vigência</th>${adm ? "<th></th>" : ""}</tr></thead><tbody>
-    ${an.map(({ c, meses, ult, venceEm, divs }) => `<tr><td><b style="font-weight:600">${esc(c.forn)}</b></td><td>${esc(c.objeto || "")}</td><td class="n">${brl(c.valor)}</td><td>${ult ? rotuloMes(ult.mes) : "—"}</td><td class="n">${ult ? brl(ult.p) : "—"}</td><td>${stTxt(ult, c)}</td>
+    ${an.map(({ c, meses, ult, venceEm, divs }) => `<tr><td><b style="font-weight:600">${esc(c.forn)}</b>${c.link ? `<br><a class="mini" href="${esc(c.link)}" target="_blank" rel="noopener noreferrer">📎 contrato</a>` : ""}</td><td>${esc(c.objeto || "")}${c.filtro ? `<br><span class="mini">conta só lançamentos com "${esc(c.filtro)}"</span>` : ""}</td><td class="n">${brl(c.valor)}</td><td>${ult ? rotuloMes(ult.mes) : "—"}</td><td class="n">${ult ? brl(ult.p) : "—"}</td><td>${stTxt(ult, c)}</td>
       <td class="n"><span class="chips">${meses.map((m) => `<i class="chip ${m.st}" data-tip="${esc(`${rotuloMes(m.mes)}\nPago: ${brl(m.p)}\nContratado: ${brl(c.valor)}`)}"></i>`).join("")}</span><span class="mini">${divs} de ${meses.length}</span></td>
       <td>${c.inicio ? rotuloMes(c.inicio) : "—"} a ${c.fim ? dataBR(c.fim) : "indeterminado"}${venceEm !== null ? `<br><span class="mini ${venceEm <= 60 ? "neg" : ""}">${venceEm < 0 ? `vencido há ${-venceEm} dia(s)` : `vence em ${venceEm} dia(s)`}</span>` : ""}${c.reajuste ? `<br><span class="mini">reajuste: ${esc(c.reajuste)}</span>` : ""}</td>
       ${adm ? `<td><div class="acoes-lin"><button type="button" data-ct-edit="${c.id}">Editar</button><button type="button" class="perigo" data-ct-del="${c.id}">Excluir</button></div></td>` : ""}</tr>`).join("")}
@@ -1249,6 +1251,8 @@ function formContrato(c) {
       <label>Fim<input id="ctFim" type="date" value="${c?.fim || ""}"></label>
       <label>Reajuste<input id="ctReaj" value="${esc(c?.reajuste || "")}" placeholder="ex.: IPCA em janeiro"></label>
       <label>Tolerância (%)<input id="ctTol" inputmode="decimal" value="${String(c?.tol ?? 2).replace(".", ",")}"></label>
+      <label>Contar só lançamentos com o texto<input id="ctFiltro" value="${esc(c?.filtro || "")}" placeholder="ex.: ASSESSORIA (opcional)"></label>
+      <label>Link do contrato<input id="ctLink" type="url" value="${esc(c?.link || "")}" placeholder="https:// (Google Drive, opcional)"></label>
     </div>
     <datalist id="listaForn">${forns.map((f) => `<option value="${esc(f)}">`).join("")}</datalist>
     <div class="acoes" style="margin-top:10px"><button class="btn" type="submit">${c ? "Salvar alterações" : "Cadastrar contrato"}</button>${c ? `<button class="btn sec" type="button" id="ctCancelar">Cancelar</button>` : ""}<span class="small muted" id="ctMsg"></span></div>`;
@@ -1597,7 +1601,7 @@ document.addEventListener("submit", async (e) => {
     const valor = parseValor($("#ctValor").value), forn = $("#ctForn").value.trim();
     if (!forn || !valor) return ($("#ctMsg").textContent = "Informe o fornecedor e o valor mensal.");
     const id = f.dataset.id || novoId();
-    const c = { id, forn, objeto: $("#ctObj").value.trim(), valor, inicio: $("#ctIni").value, fim: $("#ctFim").value, reajuste: $("#ctReaj").value.trim(), tol: parseValor($("#ctTol").value) || 2, por: nomeUsuario(), ts: new Date().toISOString() };
+    const c = { id, forn, objeto: $("#ctObj").value.trim(), valor, inicio: $("#ctIni").value, fim: $("#ctFim").value, reajuste: $("#ctReaj").value.trim(), tol: parseValor($("#ctTol").value) || 2, filtro: $("#ctFiltro").value.trim(), link: urlValida($("#ctLink").value.trim()) ? $("#ctLink").value.trim() : "", por: nomeUsuario(), ts: new Date().toISOString() };
     const antes = S.contratos; S.contratos = [...S.contratos.filter((x) => x.id !== id), c].sort((a, b) => a.forn.localeCompare(b.forn, "pt-BR"));
     try { await salvarConteudo("contratos"); registrar(f.dataset.id ? "Alterou contrato" : "Cadastrou contrato", `${forn} · ${brl(valor)}`); S.ctEditando = ""; toast("Contrato salvo."); render(); }
     catch (err) { S.contratos = antes; $("#ctMsg").textContent = mensagemErro(err); }
