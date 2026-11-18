@@ -146,11 +146,12 @@ export async function listarAcessos() {
 // ---------------------------------------------------------------- dados protegidos
 export async function lerDados() {
   const { fs, db } = AC.fb;
-  const [q, ac, an, orc] = await Promise.all([fs.getDocs(fs.collection(db, "balancetes")), fs.getDoc(ref("acompanhamento", "geral")), fs.getDoc(ref("conteudo", "analise")), fs.getDoc(ref("conteudo", "orcamento"))]);
+  const [q, ac, an, orc, ct, fu] = await Promise.all([fs.getDocs(fs.collection(db, "balancetes")), fs.getDoc(ref("acompanhamento", "geral")), fs.getDoc(ref("conteudo", "analise")), fs.getDoc(ref("conteudo", "orcamento")), fs.getDoc(ref("conteudo", "contratos")), fs.getDoc(ref("conteudo", "fundo"))]);
   const meses = {};
   q.docs.forEach((d) => (meses[d.id] = d.data()));
   return { meses, acompanhamento: ac.exists() ? ac.data().itens || {} : {}, analise: an.exists() ? an.data().html || "" : "",
-    orcamento: orc.exists() ? orc.data().previsoes || [] : [] };
+    orcamento: orc.exists() ? orc.data().previsoes || [] : [],
+    contratos: ct.exists() ? ct.data().lista || [] : [], fundo: fu.exists() ? fu.data().config || null : null };
 }
 export async function gravarMeses(meses) {
   const { fs, db } = AC.fb;
@@ -162,6 +163,20 @@ export async function gravarMeses(meses) {
   }
 }
 export const gravarOrcamento = (previsoes) => AC.fb.fs.setDoc(ref("conteudo", "orcamento"), { previsoes: JSON.parse(JSON.stringify(previsoes)), atualizado: agora() });
+export const gravarContratos = (lista) => AC.fb.fs.setDoc(ref("conteudo", "contratos"), { lista: JSON.parse(JSON.stringify(lista)), atualizado: agora() });
+export const gravarFundo = (config) => AC.fb.fs.setDoc(ref("conteudo", "fundo"), { config: JSON.parse(JSON.stringify(config)), atualizado: agora() });
+// registro de acessos e alterações (só o administrador lê; ninguém altera ou apaga)
+export async function registrar(acao, detalhe = "") {
+  if (!AC.ligado || !AC.user) return;
+  try {
+    await AC.fb.fs.addDoc(AC.fb.fs.collection(AC.fb.db, "registros"), { uid: AC.user.uid, nome: nomeUsuario(), usuario: AC.reg?.usuario || "", acao, detalhe: String(detalhe).slice(0, 300), ts: agora() });
+  } catch {}
+}
+export async function lerRegistros(n = 300) {
+  const { fs, db } = AC.fb;
+  const q = await fs.getDocs(fs.query(fs.collection(db, "registros"), fs.orderBy("ts", "desc"), fs.limit(n)));
+  return q.docs.map((d) => d.data());
+}
 export const nomeUsuario = () => (AC.reg ? AC.reg.nome || AC.reg.usuario : "");
 export const gravarAnalise = (html) => AC.fb.fs.setDoc(ref("conteudo", "analise"), { html, atualizado: agora() });
 // grava só os itens alterados; merge preserva o que outros conselheiros gravaram
@@ -200,5 +215,10 @@ service cloud.firestore {
     match /balancetes/{mes} { allow read: if ativo(); allow write: if admin(); }
     match /conteudo/{doc} { allow read: if ativo(); allow write: if admin(); }
     match /acompanhamento/{doc} { allow read: if ativo(); allow write: if editor(); }
+    match /registros/{id} {
+      allow read: if admin();
+      allow create: if ativo() && request.resource.data.uid == request.auth.uid;
+      allow update, delete: if false;
+    }
   }
 }`;

@@ -4,14 +4,14 @@ import { renderMes, renderProjecao, renderFornecedor, mapaCalor, SITUACOES, chav
 import { comboMensal, saude, treemapCategorias, listaTendencia, multiplos } from "./graficos.mjs";
 import { AC, PERFIS, podeEditar, ehAdmin, normUsuario, validarSenha, mensagemErro, carregarFirebase, existeAdministrador, entrar, sair, aoMudarSessao,
   lerPerfil, registrarAcesso, trocarSenha, criarPrimeiroAdmin, criarAcesso, novaSenhaProvisoria, atualizarAcesso, listarAcessos,
-  lerDados, gravarMeses, gravarAnalise, gravarAcomp, ouvirAcomp, gravarOrcamento, nomeUsuario, REGRAS } from "./acesso.mjs";
+  lerDados, gravarMeses, gravarAnalise, gravarAcomp, ouvirAcomp, gravarOrcamento, nomeUsuario, gravarContratos, gravarFundo, registrar, lerRegistros, REGRAS } from "./acesso.mjs";
 import { rotuloMes, r2, lancamentos, resumoMensal, porCategoria, porFornecedor, parcelas, indicadores, alertas } from "./analise.mjs";
 
 const $ = (s) => document.querySelector(s);
 const brl = (v) => (v ?? 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 const pct = (v) => (v * 100).toFixed(1).replace(".", ",") + "%";
 const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
-const LS_ORC = "farol.orcamento.v1", LS_ORD = "farol.ordem.v1", LS_ACOMP = "farol.acompanhamento.v1", LS_MESES = "farol.balancetes.locais.v1", LS_GH = "farol.github.v1", LS_PER = "farol.periodo.v1";
+const LS_CT = "farol.contratos.v1", LS_FUNDO = "farol.fundo.v1", LS_ATA = "farol.ata.v1", LS_VISTO = "farol.ultimoMesVisto", LS_ORC = "farol.orcamento.v1", LS_ORD = "farol.ordem.v1", LS_ACOMP = "farol.acompanhamento.v1", LS_MESES = "farol.balancetes.locais.v1", LS_GH = "farol.github.v1", LS_PER = "farol.periodo.v1";
 const ls = {
   get(k, d) { try { const v = localStorage.getItem(k); return v ? JSON.parse(v) : d; } catch { return d; } },
   set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); return true; } catch { return false; } },
@@ -31,10 +31,11 @@ async function carregarBase(protegido) {
     ls.set(LS_ACOMP, S.acomp);
     $("#analiseCurada").innerHTML = protegido.analise || "";
     S.orc = protegido.orcamento || [];
+    S.contratos = protegido.contratos || []; S.fundo = protegido.fundo || null;
     juntar(); return;
   }
   try { const r = await fetch("data/analise.html", { cache: "no-store" }); if (r.ok) $("#analiseCurada").innerHTML = await r.text(); } catch {}
-  S.orc = ls.get(LS_ORC, []);
+  S.orc = ls.get(LS_ORC, []); S.contratos = ls.get(LS_CT, []); S.fundo = ls.get(LS_FUNDO, null);
   try {
     const r = await fetch("data/balancetes.json", { cache: "no-store" });
     if (!r.ok) throw new Error(r.status);
@@ -96,7 +97,7 @@ function render() {
     painel(); acompanhamento(); renderExecutivo(S.meses, $("#secAnalises")); categorias(); fornecedores(); listaAlertas(); tabParcelas(); notas(); conselho();
     renderMes(S.todos, S.mesSel || S.meses.at(-1).mes, alertas(S.todos), $("#secMes"));
     renderProjecao(S.todos, $("#secProjecao"));
-    resumoMes(); orcamentoTab(); prepararDoc();
+    resumoMes(); orcamentoTab(); orcExtras(); prepararDoc(); prepararAta(); agendaTab(); contratosTab(); avisoNovo();
   }
   lancTab(); dadosTab();
 }
@@ -223,7 +224,7 @@ function salvarAcomp(chave, campos, nota) {
   const quem = nomeUsuario();
   const novo = { ...atual, ...campos, ts: agora, data: new Date().toLocaleDateString("pt-BR"), por: quem };
   if (a) novo.snap = { sev: a.sev, tipo: a.tipo, titulo: a.titulo, pergunta: a.pergunta || "", mes: a.mes || "" };
-  if (nota) novo.hist = [...(atual.hist || []), { ts: agora, txt: nota, por: quem }].slice(-60);
+  if (nota) { novo.hist = [...(atual.hist || []), { ts: agora, txt: nota, por: quem }].slice(-60); registrar("Alterou alerta", `${(a ? a.titulo : chave).slice(0, 120)}: ${nota}`); }
   S.acomp[chave] = novo;
   const ok = ls.set(LS_ACOMP, S.acomp);
   if (!ok) toast("O navegador bloqueou a gravação. Desative o modo anônimo ou libere o armazenamento do site.");
@@ -331,7 +332,7 @@ function linhaHist(h) {
 }
 function editorAcomp(a) {
   const e = S.acomp[a.chave] || {};
-  if (!podeEditar()) return `<div class="acomp somente-leitura"><div class="acomp-rodape"><span class="sit ${a.sit}">${SITUACOES[a.sit]}</span>${e.enviado ? `<span class="mini">enviado em ${dataBR(e.enviado)}</span>` : ""}${e.prazo ? `<span class="mini">prazo ${dataBR(e.prazo)}</span>` : ""}${linhaAging(e, a.sit)}</div>${e.resposta ? `<div class="orfa-txt">${esc(e.resposta)}</div>` : ""}</div>`;
+  if (!podeEditar()) return `<div class="acomp somente-leitura"><div class="acomp-rodape"><span class="sit ${a.sit}">${SITUACOES[a.sit]}</span>${e.enviado ? `<span class="mini">enviado em ${dataBR(e.enviado)}</span>` : ""}${e.prazo ? `<span class="mini">prazo ${dataBR(e.prazo)}</span>` : ""}${linhaAging(e, a.sit)}</div>${e.resposta ? `<div class="orfa-txt">${esc(e.resposta)}</div>` : ""}${blocoLinks(a, e, false)}</div>`;
   return `<div class="acomp">
     <div class="acomp-campos">
       <label>Situação<select data-acomp="${a.chave}">${Object.entries(SITUACOES).map(([k, t]) => `<option value="${k}" ${a.sit === k ? "selected" : ""}>${t}</option>`).join("")}</select></label>
@@ -341,6 +342,7 @@ function editorAcomp(a) {
     </div>
     <label class="acomp-resp">Resposta da administradora / anotação do conselho
       <textarea data-resp="${a.chave}" rows="3" placeholder="Registre a resposta recebida ou a providência combinada. Grava sozinho enquanto você digita.">${esc(e.resposta || "")}</textarea></label>
+    ${blocoLinks(a, e, true)}
     <div class="acomp-rodape"><span data-salvo="${a.chave}" class="salvo">${e.ts ? `Salvo ${horaBR(e.ts)}${e.por ? ` por ${esc(e.por)}` : ""}` : e.data ? `Salvo em ${esc(e.data)}` : ""}</span>${linhaAging(e, a.sit)}
       ${(e.hist || []).length ? `<details class="hist"><summary>Histórico (${e.hist.length})</summary><ul>${[...e.hist].reverse().map(linhaHist).join("")}</ul></details>` : ""}
     </div>
@@ -829,7 +831,7 @@ async function publicar() {
     if (!ehAdmin()) return toast("Só o administrador publica balancetes.");
     if (!Object.keys(S.locais).length) return toast("Nenhum mês novo para publicar.");
     const btn = $("#btnPublicar"); btn.disabled = true; btn.textContent = "Publicando…";
-    try { await gravarMeses(S.locais); S.base = { ...S.base, ...S.locais }; S.locais = {}; ls.del(LS_MESES); juntar(); render(); toast("Balancetes gravados na base protegida."); }
+    try { await gravarMeses(S.locais); registrar("Publicou balancetes", Object.keys(S.locais).map(rotuloMes).join(", ")); S.base = { ...S.base, ...S.locais }; S.locais = {}; ls.del(LS_MESES); juntar(); render(); toast("Balancetes gravados na base protegida."); }
     catch (e) { toast(mensagemErro(e)); }
     btn.disabled = false; btn.textContent = "Publicar balancetes"; return;
   }
@@ -857,7 +859,7 @@ async function publicar() {
 
 
 // ---------------------------------------------------------------- Resumo do mês (tela simples, padrão do perfil Visualização)
-const ABAS_VIS = ["resumo", "painel", "analises", "mes", "orcamento"];
+const ABAS_VIS = ["resumo", "painel", "analises", "mes", "orcamento", "agenda"];
 function resumoMes() {
   const sel = $("#resumoMesSel");
   const ops = [...S.todos].reverse().map((b) => `<option value="${b.mes}">${rotuloMes(b.mes)}</option>`).join("");
@@ -899,21 +901,37 @@ function resumoMes() {
       ${resp.length ? `<ul class="lista-pend">${resp.map((a) => { const e = S.acomp[a.chave]; return `<li><b>${esc(a.titulo.replace(/\s*\(R\$[^)]*em aberto\)/, ""))}</b><span>${esc(e.resposta)}</span><span class="mini">${SITUACOES[a.sit]}${e.por ? ` · registrado por ${esc(e.por)}` : ""}${e.ts ? ` em ${horaBR(e.ts)}` : ""}</span></li>`; }).join("")}</ul>` : `<p class="muted">Nenhuma resposta registrada ainda.</p>`}
     </div>
   </div>
+  ${(() => { const pc = proximosCompromissos(30).slice(0, 4); return pc.length ? `<div class="card"><div class="cab-secao"><span class="eyebrow">Agenda</span><h2>Próximos compromissos</h2></div><ul class="agenda">${pc.map((x) => `<li class="ag ${x.tipo}"><div class="ag-data"><b>${x.data.slice(8, 10)}</b><span>${MESES_EXT[+x.data.slice(5, 7) - 1].slice(0, 3)}</span></div><div class="ag-txt"><b>${esc(x.titulo)}</b><span class="mini">${TIPOS_AG[x.tipo] || ""}${x.hora ? ` · ${esc(x.hora)}` : ""}${x.local ? ` · ${esc(x.local)}` : ""}</span></div></li>`).join("")}</ul></div>` : ""; })()}
   <p class="small muted">${pd.confere ? "✓ Os totais do demonstrativo conferem com a soma dos lançamentos." : "✗ Os totais do demonstrativo não conferem com a soma dos lançamentos."} Demonstrativo emitido pela Logo Gestão Condominial em ${esc(b.emissao)}.</p>`;
 }
 
 // ---------------------------------------------------------------- aviso de prazo vencido (ao entrar)
 function avisoVencidos() {
   if (!podeEditar()) return;
-  const v = S.vencidos || [];
-  let visto = false; try { visto = sessionStorage.getItem("farol.avisoVenc") === String(v.length); } catch {}
-  if (!v.length || visto) return;
-  const hoje = hojeISO();
-  $("#avisoLista").innerHTML = v.map((a) => { const e = S.acomp[a.chave] || {}; return `<li><b>${esc(a.titulo.replace(/\s*\(R\$[^)]*em aberto\)/, ""))}</b><span class="mini">enviado em ${dataBR(e.enviado) || "—"} · prazo ${dataBR(e.prazo)} · vencido há ${diasEntre(e.prazo, hoje)} dia(s)${e.responsavel ? ` · responsável: ${esc(e.responsavel)}` : ""}</span></li>`; }).join("");
-  $("#avisoTitulo").textContent = `${v.length} pergunta(s) com prazo de resposta vencido`;
+  const v = S.vencidos || [], hoje = hojeISO();
+  const ultMes = S.todos.at(-1)?.mes;
+  const cts = (S.contratos || []).map((c) => ({ c, ...analisarContrato(c) }));
+  const ctDiv = cts.filter((x) => x.ult && x.ult.mes === ultMes && x.ult.st !== "ok");
+  const ctVenc = cts.filter((x) => x.venceEm !== null && x.venceEm >= 0 && x.venceEm <= 30);
+  const comp = proximosCompromissos(3).filter((x) => !x.auto);
+  const assinatura = [v.length, ctDiv.length, ctVenc.length, comp.length].join("-");
+  let visto = false; try { visto = sessionStorage.getItem("farol.avisoVenc") === assinatura; } catch {}
+  if ((!v.length && !ctDiv.length && !ctVenc.length && !comp.length) || visto) return;
+  S.assinaturaAviso = assinatura;
+  const li = (t, d) => `<li><b>${t}</b><span class="mini">${d}</span></li>`;
+  let h = "";
+  if (v.length) h += `<li class="grupo-av">Prazo de resposta vencido</li>` + v.map((a) => { const e = S.acomp[a.chave] || {}; return li(esc(a.titulo.replace(/\s*\(R\$[^)]*em aberto\)/, "")), `aguardando ${esc(destinoDe(a).toLowerCase())} · prazo ${dataBR(e.prazo)} · vencido há ${diasEntre(e.prazo, hoje)} dia(s)`); }).join("");
+  if (ctDiv.length) h += `<li class="grupo-av">Contratos com pagamento diferente em ${rotuloMes(ultMes)}</li>` + ctDiv.map((x) => li(esc(x.c.forn), x.ult.st === "ausente" ? `sem pagamento · contratado ${brl(x.c.valor)}` : `pago ${brl(x.ult.p)} · contratado ${brl(x.c.valor)}`)).join("");
+  if (ctVenc.length) h += `<li class="grupo-av">Contratos vencendo em até 30 dias</li>` + ctVenc.map((x) => li(esc(x.c.forn), `vence em ${dataBR(x.c.fim)} (${x.venceEm} dia(s))`)).join("");
+  if (comp.length) h += `<li class="grupo-av">Compromissos nos próximos 3 dias</li>` + comp.map((x) => li(esc(x.titulo), `${dataBR(x.data)}${x.hora ? ` às ${esc(x.hora)}` : ""}${x.local ? ` · ${esc(x.local)}` : ""}`)).join("");
+  $("#avisoLista").innerHTML = h;
+  $("#avisoTitulo").textContent = v.length ? `${v.length} pergunta(s) com prazo de resposta vencido` : "Pontos de atenção";
+  $("#avisoEyebrow").textContent = v.length ? "Prazo vencido" : "Atenção";
+  $("#avisoSub").textContent = v.length ? "O destinatário não respondeu no prazo combinado. Vale cobrar a resposta." : "Itens que pedem a atenção do conselho.";
+  $("#avisoIr").hidden = !v.length;
   $("#avisoVenc").hidden = false;
 }
-function fecharAviso() { $("#avisoVenc").hidden = true; try { sessionStorage.setItem("farol.avisoVenc", String((S.vencidos || []).length)); } catch {} }
+function fecharAviso() { $("#avisoVenc").hidden = true; try { sessionStorage.setItem("farol.avisoVenc", S.assinaturaAviso || ""); } catch {} }
 
 // ---------------------------------------------------------------- orçado x realizado
 const novoId = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
@@ -1061,6 +1079,11 @@ function gerarDocParecer() {
   <p>${conclusao}</p>
   <p class="doc-data">Salvador, ${dataExtenso(hojeISO())}.</p>
   <div class="assinaturas"><div><span></span>Conselheiro(a) Fiscal</div><div><span></span>Conselheiro(a) Fiscal</div><div><span></span>Conselheiro(a) Fiscal</div></div>`;
+  abrirDoc("Parecer do Conselho Fiscal", `Parecer-Conselho-Fiscal-${b.mes}.doc`);
+  registrar("Gerou documento", `Parecer de ${rotuloMes(b.mes)}`);
+}
+function abrirDoc(titulo, arquivo) {
+  $("#docTitulo").textContent = titulo; S.docArquivo = arquivo;
   $("#docParecer").hidden = false; document.body.classList.add("com-doc");
   $("#folha").focus();
 }
@@ -1069,8 +1092,297 @@ function baixarWord() {
   const html = `<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word"><head><meta charset="utf-8"><style>${css}</style></head><body>${$("#folha").innerHTML}</body></html>`;
   const a = document.createElement("a");
   a.href = URL.createObjectURL(new Blob(["﻿", html], { type: "application/msword" }));
-  a.download = `Parecer-Conselho-Fiscal-${$("#docMes").value}.doc`;
+  a.download = S.docArquivo || `Parecer-Conselho-Fiscal-${$("#docMes").value}.doc`;
   document.body.appendChild(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1000);
+}
+
+
+// ================================================================ melhorias do conselho
+const pode = () => podeEditar();
+const salvarConteudo = async (qual) => {
+  if (qual === "contratos") { if (AC.ligado) await gravarContratos(S.contratos); else ls.set(LS_CT, S.contratos); }
+  if (qual === "fundo") { if (AC.ligado) await gravarFundo(S.fundo); else ls.set(LS_FUNDO, S.fundo); }
+};
+const cabDoc = (cond) => `<header class="doc-cab"><img src="img/logo-farol.png" alt="" width="70"><div><b>${esc(cond.toUpperCase())}</b><span>Conselho Fiscal</span></div></header>`;
+const urlValida = (u) => /^https?:\/\/[^\s]+$/i.test(u);
+
+// ---------------------------------------------------------------- aviso de balancete novo (por navegador)
+function avisoNovo() {
+  const ult = S.todos.at(-1)?.mes; if (!ult) return;
+  const visto = ls.get(LS_VISTO, null);
+  if (!visto) { ls.set(LS_VISTO, ult); return; }
+  const novos = S.todos.filter((b) => b.mes > visto);
+  $("#bannerNovo").hidden = !novos.length;
+  if (novos.length) $("#bannerNovoTxt").innerHTML = `Novo balancete disponível: <b>${novos.map((b) => rotuloMes(b.mes)).join(", ")}</b>.`;
+}
+function marcarVisto() { ls.set(LS_VISTO, S.todos.at(-1)?.mes); $("#bannerNovo").hidden = true; }
+
+// ---------------------------------------------------------------- links de documentos em cada alerta
+function blocoLinks(a, e, edita) {
+  const links = (e.links || []).filter((l) => l && l.url);
+  const lista = links.map((l, i) => `<li><a href="${esc(l.url)}" target="_blank" rel="noopener noreferrer">${esc(l.nome || l.url.replace(/^https?:\/\//, "").slice(0, 60))}</a>${l.por ? `<span class="mini"> · ${esc(l.por)}</span>` : ""}${edita ? ` <button type="button" class="link-x" data-link-del="${a.chave}" data-i="${i}" aria-label="Remover link">×</button>` : ""}</li>`).join("");
+  return `<div class="links-doc">${links.length ? `<span class="mini" style="font-weight:700">Documentos</span><ul>${lista}</ul>` : ""}
+    ${edita ? `<div class="link-add"><input type="url" placeholder="Cole o link do documento (Google Drive, e-mail…)" data-link-url="${a.chave}"><input placeholder="Nome (opcional)" data-link-nome="${a.chave}"><button type="button" class="btn sec" data-link-add="${a.chave}">Anexar link</button></div>` : ""}</div>`;
+}
+
+// ---------------------------------------------------------------- agenda do conselho
+const TIPOS_AG = { reuniao: "Reunião do conselho", assembleia: "Assembleia", prazo: "Prazo", outro: "Outro" };
+function itensAgenda() {
+  const man = Object.entries(S.acomp).filter(([k, v]) => k.startsWith("ag:") && v && !v.removido).map(([k, v]) => ({ ...v, id: k, manual: true }));
+  const autos = [];
+  for (const a of relevantesTodos().filter((x) => x.sit === "questionado")) { const e = S.acomp[a.chave] || {}; if (e.prazo) autos.push({ data: e.prazo, tipo: "prazo", titulo: `Prazo de resposta: ${a.titulo.replace(/\s*\(R\$[^)]*em aberto\)/, "")}`, obs: `Aguardando resposta ${preposicao(destinoDe(a))}`, auto: true }); }
+  for (const c of S.contratos || []) if (c.fim) autos.push({ data: c.fim, tipo: "prazo", titulo: `Fim do contrato: ${c.forn}${c.objeto ? ` (${c.objeto})` : ""}`, obs: "Avaliar renovação ou nova cotação", auto: true });
+  return [...man, ...autos].sort((x, y) => (x.data + (x.hora || "")).localeCompare(y.data + (y.hora || "")));
+}
+function agendaTab() {
+  const el = $("#secAgenda"); if (!el) return;
+  const hoje = hojeISO(), it = itensAgenda(), prox = it.filter((x) => x.data >= hoje), pass = it.filter((x) => x.data < hoje).reverse();
+  const linha = (x) => { const d = diasEntre(hoje, x.data); return `<li class="ag ${x.tipo}"><div class="ag-data"><b>${x.data.slice(8, 10)}</b><span>${MESES_EXT[+x.data.slice(5, 7) - 1].slice(0, 3)}/${x.data.slice(2, 4)}</span></div>
+    <div class="ag-txt"><b>${esc(x.titulo)}</b><span class="mini">${TIPOS_AG[x.tipo] || ""}${x.hora ? ` · ${esc(x.hora)}` : ""}${x.local ? ` · ${esc(x.local)}` : ""}${x.obs ? ` · ${esc(x.obs)}` : ""}${x.auto ? " · automático" : x.por ? ` · por ${esc(x.por)}` : ""}</span></div>
+    <div class="ag-quando">${d === 0 ? "<b>hoje</b>" : d > 0 ? `em ${d} dia(s)` : `há ${-d} dia(s)`}${x.manual && pode() ? `<button type="button" class="link-x" data-ag-del="${x.id}" aria-label="Remover">×</button>` : ""}</div></li>`; };
+  el.innerHTML = `
+  ${pode() ? `<form class="card" id="fAgenda"><div class="cab-secao"><span class="eyebrow">Novo compromisso</span><h2>Adicionar à agenda</h2></div>
+    <div class="form" style="margin-top:12px">
+      <label>Data<input type="date" id="agData" required></label><label>Horário<input type="time" id="agHora"></label>
+      <label>Tipo<select id="agTipo">${Object.entries(TIPOS_AG).map(([k, t]) => `<option value="${k}">${t}</option>`).join("")}</select></label>
+      <label>Título<input id="agTitulo" required placeholder="ex.: Reunião mensal do conselho"></label>
+      <label>Local<input id="agLocal" placeholder="opcional"></label><label>Observação<input id="agObs" placeholder="opcional"></label>
+    </div><div class="acoes" style="margin-top:10px"><button class="btn" type="submit">Adicionar</button></div></form>` : ""}
+  <div class="card"><div class="cab-secao"><span class="eyebrow">Próximos</span><h2>Compromissos e prazos</h2></div>
+    <p class="small muted" style="margin:6px 0 0">Os prazos de resposta das perguntas enviadas e o fim dos contratos entram sozinhos.</p>
+    ${prox.length ? `<ul class="agenda">${prox.map(linha).join("")}</ul>` : `<p class="muted">Nada agendado.</p>`}</div>
+  ${pass.length ? `<details class="card"><summary><b>Passados (${pass.length})</b></summary><ul class="agenda">${pass.slice(0, 40).map(linha).join("")}</ul></details>` : ""}`;
+}
+function proximosCompromissos(dias) { const hoje = hojeISO(), lim = somaDias(hoje, dias); return itensAgenda().filter((x) => x.data >= hoje && x.data <= lim); }
+
+// ---------------------------------------------------------------- ata da reunião
+function gerarAta() {
+  const f = { data: $("#ataData").value || hojeISO(), hora: $("#ataHora").value, local: $("#ataLocal").value.trim(), presentes: $("#ataPresentes").value.split(/\n+/).map((x) => x.trim()).filter(Boolean), delib: $("#ataDelib").value.split(/\n+/).map((x) => x.trim()).filter(Boolean), mes: $("#ataMes").value };
+  ls.set(LS_ATA, { ...f, presentes: $("#ataPresentes").value, delib: $("#ataDelib").value });
+  const b = S.todos.find((x) => x.mes === f.mes) || S.todos.at(-1), t = b.totais, res = t.receitas - t.despesas, pd = parecerDe(b), cond = b.condominio || "Condomínio";
+  const resp = relevantesTodos().filter((a) => (a.sit === "respondido" || a.sit === "resolvido") && (S.acomp[a.chave]?.resposta || "").trim());
+  const naoEnv = relevantesTodos().filter((a) => a.sit === "pendente" && a.pergunta && (a.sev === "alta" || a.sev === "media"));
+  const proxReun = itensAgenda().find((x) => x.tipo === "reuniao" && x.data > f.data);
+  const hora = f.hora ? `, às ${f.hora.replace(":", "h")}` : "";
+  $("#folha").innerHTML = `${cabDoc(cond)}
+  <h1>ATA DA REUNIÃO DO CONSELHO FISCAL</h1>
+  <p>Aos ${dataExtenso(f.data)}${hora}${f.local ? `, em ${esc(f.local)}` : ""}, reuniram-se os membros do Conselho Fiscal do ${esc(cond)}${f.presentes.length ? `: ${f.presentes.map(esc).join(", ")}` : ""}, para tratar da seguinte pauta: (1) análise do demonstrativo de receitas e despesas de ${mesExtenso(b.mes)}; (2) acompanhamento das pendências junto ao síndico e à administradora; (3) assuntos gerais.</p>
+  <h2>1. Demonstrativo de ${mesExtenso(b.mes)}</h2>
+  <p>Foi analisado o demonstrativo emitido pela Logo Gestão Condominial em ${esc(b.emissao)}, que apresenta receitas de ${brl(t.receitas)}, despesas de ${brl(t.despesas)}, ${res >= 0 ? "sobra" : "falta"} de ${brl(Math.abs(res))} no mês e saldo final em caixa de ${brl(t.saldoAtual)}. ${pd.confere ? "Os totais conferem com a soma dos lançamentos." : "Os totais não conferem com a soma dos lançamentos."} Parecer do conselho para o mês: <b>${pd.rot.toLowerCase()}</b>.</p>
+  <h2>2. Pendências</h2>
+  ${pd.aguard.length ? gruposAguard(pd.aguard).map((gr) => `<p>${gr.rot}:</p><ol>${gr.itens.map((a) => { const e = S.acomp[a.chave] || {}; return `<li>${esc(a.titulo.replace(/\s*\(R\$[^)]*em aberto\)/, ""))}${e.prazo ? ` (prazo ${dataBR(e.prazo)}${e.prazo < f.data ? ", vencido" : ""})` : ""}.</li>`; }).join("")}</ol>`).join("") : "<p>Não há perguntas aguardando resposta.</p>"}
+  ${resp.length ? `<p>Esclarecimentos recebidos e registrados:</p><ol>${resp.map((a) => `<li>${esc(a.titulo.replace(/\s*\(R\$[^)]*em aberto\)/, ""))}: ${esc(S.acomp[a.chave].resposta.trim())}</li>`).join("")}</ol>` : ""}
+  <h2>3. Deliberações</h2>
+  ${f.delib.length ? `<ol>${f.delib.map((d) => `<li>${esc(d)}</li>`).join("")}</ol>` : "<p>(registrar as deliberações)</p>"}
+  <h2>4. Encaminhamentos</h2>
+  <ol>${naoEnv.length ? `<li>Encaminhar ao síndico e à administradora ofício com ${naoEnv.length} pergunta(s) ainda não enviada(s), com prazo de resposta de 15 dias.</li>` : ""}
+    ${pd.aguard.filter((a) => (S.acomp[a.chave] || {}).prazo < f.data).length ? `<li>Cobrar as respostas com prazo vencido.</li>` : ""}
+    <li>${proxReun ? `Próxima reunião em ${dataBR(proxReun.data)}${proxReun.hora ? ` às ${proxReun.hora.replace(":", "h")}` : ""}.` : "Próxima reunião: ____/____/______."}</li></ol>
+  <p>Nada mais havendo a tratar, a reunião foi encerrada e lavrada a presente ata, que vai assinada pelos presentes.</p>
+  <div class="assinaturas">${(f.presentes.length ? f.presentes : ["Conselheiro(a) Fiscal", "Conselheiro(a) Fiscal", "Conselheiro(a) Fiscal"]).map((n) => `<div><span></span>${esc(n)}</div>`).join("")}</div>`;
+  abrirDoc("Ata da reunião do Conselho Fiscal", `Ata-Conselho-Fiscal-${f.data}.doc`);
+  registrar("Gerou documento", `Ata de ${dataBR(f.data)}`);
+}
+function prepararAta() {
+  const sel = $("#ataMes"); if (!sel) return;
+  const ops = [...S.todos].reverse().map((b) => `<option value="${b.mes}">${rotuloMes(b.mes)}</option>`).join("");
+  if (sel.dataset.ops !== ops) { sel.innerHTML = ops; sel.dataset.ops = ops; }
+  if (!sel.dataset.ok) {
+    const r = ls.get(LS_ATA, {}); sel.dataset.ok = "1";
+    $("#ataData").value = hojeISO(); $("#ataHora").value = r.hora || ""; $("#ataLocal").value = r.local || "";
+    $("#ataPresentes").value = r.presentes || (AC.reg ? AC.reg.nome || "" : ""); $("#ataDelib").value = "";
+  }
+}
+
+// ---------------------------------------------------------------- contratos
+function pagoNoMes(forn, mes) { const b = S.todos.find((x) => x.mes === mes); return b ? b.despesas.filter((d) => d.forn === forn).reduce((s2, d) => s2 + d.v, 0) : 0; }
+function analisarContrato(c) {
+  const hoje = hojeISO(), tol = (c.tol ?? 2) / 100;
+  const ms = S.todos.filter((b) => (!c.inicio || b.mes >= c.inicio) && (!c.fim || b.mes <= c.fim.slice(0, 7)));
+  const meses = ms.map((b) => { const p = r2(pagoNoMes(c.forn, b.mes)); const st = !p ? "ausente" : Math.abs(p - c.valor) <= c.valor * tol ? "ok" : "dif"; return { mes: b.mes, p, st }; });
+  const ult = meses.at(-1), venceEm = c.fim ? diasEntre(hoje, c.fim) : null;
+  return { meses, ult, venceEm, divs: meses.filter((m) => m.st !== "ok").length };
+}
+function sugestoesContrato() {
+  const base = S.todos.slice(-12), ja = new Set((S.contratos || []).map((c) => c.forn));
+  return porFornecedor(base).filter((f) => !ja.has(f.forn) && f.meses.size >= Math.min(8, base.length - 1)).map((f) => {
+    const vals = base.map((b) => pagoNoMes(f.forn, b.mes)).filter((v) => v > 0).sort((a, b2) => a - b2);
+    const med = vals[Math.floor(vals.length / 2)];
+    const estavel = vals.filter((v) => Math.abs(v - med) <= med * 0.05).length / vals.length;
+    return { forn: f.forn, valor: r2(med), meses: vals.length, estavel, cat: [...f.cats][0] };
+  }).filter((x) => x.estavel >= 0.6 && !/Coelba|Embasa|energia|água/i.test(x.forn)).sort((a, b2) => b2.valor - a.valor).slice(0, 12);
+}
+function contratosTab() {
+  const el = $("#secContratos"); if (!el) return;
+  const adm = ehAdmin(), lista = S.contratos || [], an = lista.map((c) => ({ c, ...analisarContrato(c) }));
+  const ultMes = S.todos.at(-1)?.mes, divUlt = an.filter((x) => x.ult && x.ult.mes === ultMes && x.ult.st !== "ok"), venc = an.filter((x) => x.venceEm !== null && x.venceEm <= 60);
+  const stTxt = (m, c) => !m ? "—" : m.st === "ok" ? `<span class="sit resolvido">Conforme</span>` : m.st === "ausente" ? `<span class="sit pendente">Sem pagamento</span>` : `<span class="sit questionado">${m.p > c.valor ? "+" : ""}${brl(m.p - c.valor)}</span>`;
+  const sug = adm ? sugestoesContrato() : [];
+  el.innerHTML = `
+  <div class="kpis-sec">
+    <div class="kpi"><span class="eyebrow">Contratos cadastrados</span><b>${lista.length}</b><span class="det">${brl(lista.reduce((s2, c) => s2 + (c.valor || 0), 0))} por mês</span></div>
+    <div class="kpi ${divUlt.length ? "neg" : "pos"}"><span class="eyebrow">Diferenças em ${ultMes ? rotuloMes(ultMes) : "—"}</span><b>${divUlt.length}</b><span class="det">pagamento diferente do contratado ou ausente</span></div>
+    <div class="kpi ${venc.length ? "neg" : ""}"><span class="eyebrow">Vencendo em 60 dias</span><b>${venc.length}</b><span class="det">avaliar renovação ou cotação</span></div>
+  </div>
+  ${lista.length ? `<div class="tabela"><table id="tabContratos"><thead><tr><th>Fornecedor</th><th>Objeto</th><th class="n">Valor contratado</th><th>Último mês</th><th class="n">Pago</th><th>Situação</th><th class="n">Meses com diferença</th><th>Vigência</th>${adm ? "<th></th>" : ""}</tr></thead><tbody>
+    ${an.map(({ c, meses, ult, venceEm, divs }) => `<tr><td><b style="font-weight:600">${esc(c.forn)}</b></td><td>${esc(c.objeto || "")}</td><td class="n">${brl(c.valor)}</td><td>${ult ? rotuloMes(ult.mes) : "—"}</td><td class="n">${ult ? brl(ult.p) : "—"}</td><td>${stTxt(ult, c)}</td>
+      <td class="n"><span class="chips">${meses.map((m) => `<i class="chip ${m.st}" data-tip="${esc(`${rotuloMes(m.mes)}\nPago: ${brl(m.p)}\nContratado: ${brl(c.valor)}`)}"></i>`).join("")}</span><span class="mini">${divs} de ${meses.length}</span></td>
+      <td>${c.inicio ? rotuloMes(c.inicio) : "—"} a ${c.fim ? dataBR(c.fim) : "indeterminado"}${venceEm !== null ? `<br><span class="mini ${venceEm <= 60 ? "neg" : ""}">${venceEm < 0 ? `vencido há ${-venceEm} dia(s)` : `vence em ${venceEm} dia(s)`}</span>` : ""}${c.reajuste ? `<br><span class="mini">reajuste: ${esc(c.reajuste)}</span>` : ""}</td>
+      ${adm ? `<td><div class="acoes-lin"><button type="button" data-ct-edit="${c.id}">Editar</button><button type="button" class="perigo" data-ct-del="${c.id}">Excluir</button></div></td>` : ""}</tr>`).join("")}
+  </tbody></table></div>
+  <p class="mini">Cada quadradinho é um mês: verde conforme, amarelo valor diferente (tolerância de ${"2"}% ou a definida no contrato), vermelho sem pagamento.</p>` : `<div class="vazio card">Nenhum contrato cadastrado.${adm ? " Use o formulário abaixo ou as sugestões." : ""}</div>`}
+  ${adm ? `<form class="card" id="fContrato" data-id="${S.ctEditando || ""}">${formContrato(lista.find((c) => c.id === S.ctEditando))}</form>
+  ${sug.length ? `<div class="card"><div class="cab-secao"><span class="eyebrow">Sugestões</span><h2>Pagamentos que parecem contratos fixos</h2></div>
+    <p class="small muted" style="margin:6px 0 10px">Fornecedores pagos quase todo mês com valor estável nos últimos 12 meses. Confira o valor no contrato antes de adicionar.</p>
+    <div class="tabela"><table><thead><tr><th>Fornecedor</th><th>Categoria</th><th class="n">Valor típico</th><th class="n">Meses pagos</th><th></th></tr></thead><tbody>
+    ${sug.map((x) => `<tr><td>${esc(x.forn)}</td><td>${esc(x.cat || "")}</td><td class="n">${brl(x.valor)}</td><td class="n">${x.meses}</td><td><div class="acoes-lin"><button type="button" data-ct-sug="${esc(x.forn)}" data-v="${x.valor}">Usar no cadastro</button></div></td></tr>`).join("")}
+    </tbody></table></div></div>` : ""}` : ""}`;
+}
+function formContrato(c) {
+  const forns = porFornecedor(S.todos).map((f) => f.forn);
+  return `<div class="cab-secao"><span class="eyebrow">${c ? "Editar" : "Novo"} contrato</span><h2>${c ? esc(c.forn) : "Cadastrar contrato"}</h2></div>
+    <div class="form" style="margin-top:12px">
+      <label>Fornecedor (como aparece nos balancetes)<input id="ctForn" list="listaForn" required value="${esc(c?.forn || "")}"></label>
+      <label>Objeto<input id="ctObj" value="${esc(c?.objeto || "")}" placeholder="ex.: portaria 24h"></label>
+      <label>Valor mensal contratado (R$)<input id="ctValor" inputmode="decimal" required value="${fmtValor(c?.valor || 0)}"></label>
+      <label>Início<input id="ctIni" type="month" value="${c?.inicio || ""}"></label>
+      <label>Fim<input id="ctFim" type="date" value="${c?.fim || ""}"></label>
+      <label>Reajuste<input id="ctReaj" value="${esc(c?.reajuste || "")}" placeholder="ex.: IPCA em janeiro"></label>
+      <label>Tolerância (%)<input id="ctTol" inputmode="decimal" value="${String(c?.tol ?? 2).replace(".", ",")}"></label>
+    </div>
+    <datalist id="listaForn">${forns.map((f) => `<option value="${esc(f)}">`).join("")}</datalist>
+    <div class="acoes" style="margin-top:10px"><button class="btn" type="submit">${c ? "Salvar alterações" : "Cadastrar contrato"}</button>${c ? `<button class="btn sec" type="button" id="ctCancelar">Cancelar</button>` : ""}<span class="small muted" id="ctMsg"></span></div>`;
+}
+
+// ---------------------------------------------------------------- proposta de orçamento
+function orcExtras() { const el = $("#secOrcExtra"); if (el) el.innerHTML = propostaHTML() + fundoHTML(); }
+function propostaHTML() {
+  const base = S.todos.slice(-12); if (!base.length) return "";
+  const ano = +(S.todos.at(-1).mes.slice(0, 4)) + 1, r = S.propReaj ?? 5, inv = S.propInv ?? false;
+  const INV = /obras|imobilizado/i;
+  const cats = porCategoria(base).map((c) => ({ cat: c.cat, media: c.total / base.length })).filter((c) => inv || !INV.test(c.cat));
+  const linhas = cats.map((c) => ({ ...c, prop: r2(c.media * (1 + r / 100)) }));
+  const tot = linhas.reduce((s2, l) => s2 + l.prop, 0), recMed = base.reduce((s2, b) => s2 + b.totais.receitas, 0) / base.length;
+  S.proposta = { ano, r, linhas, tot, recMed };
+  return `<div class="card" id="cardProposta"><div class="cab"><div class="cab-secao"><span class="eyebrow">Planejamento</span><h2>Proposta de orçamento ${ano}</h2></div></div>
+    <p class="small muted" style="margin:6px 0 12px">Base: média mensal real dos últimos ${base.length} meses (${rotuloMes(base[0].mes)} a ${rotuloMes(base.at(-1).mes)}) mais o reajuste escolhido. Os valores podem ser ajustados depois de salvar.</p>
+    <div class="oficio-ctl"><label class="small">Reajuste geral (%) <input id="propReaj" inputmode="decimal" value="${String(r).replace(".", ",")}" style="width:70px"></label>
+      <label class="small"><input type="checkbox" id="propInv" ${inv ? "checked" : ""}> Incluir obras e imobilizado</label>
+      <button class="btn sec" type="button" id="propDoc">Gerar documento</button>${ehAdmin() ? `<button class="btn" type="button" id="propSalvar">Salvar como previsão ${ano}</button>` : ""}</div>
+    <div class="tabela"><table><thead><tr><th>Categoria</th><th class="n">Média real/mês</th><th class="n">Proposta/mês</th><th class="n">Proposta/ano</th></tr></thead><tbody>
+      ${linhas.map((l) => `<tr><td>${esc(l.cat)}</td><td class="n">${brl(l.media)}</td><td class="n"><b>${brl(l.prop)}</b></td><td class="n">${brl(l.prop * 12)}</td></tr>`).join("")}
+      <tr class="total"><td>Total de despesas</td><td class="n">${brl(linhas.reduce((s2, l) => s2 + l.media, 0))}</td><td class="n">${brl(tot)}</td><td class="n">${brl(tot * 12)}</td></tr>
+      <tr><td>Receita média atual</td><td class="n">${brl(recMed)}</td><td class="n" colspan="2">${tot > recMed ? `<b class="neg">faltariam ${brl(tot - recMed)}/mês (${pct(tot / recMed - 1)} de aumento na arrecadação)</b>` : `sobram ${brl(recMed - tot)}/mês`}</td></tr>
+    </tbody></table></div></div>`;
+}
+function docProposta() {
+  const p = S.proposta, b = S.todos.at(-1), cond = b.condominio || "Condomínio";
+  $("#folha").innerHTML = `${cabDoc(cond)}<h1>PROPOSTA DE PREVISÃO ORÇAMENTÁRIA ${p.ano}</h1>
+  <p class="doc-ref">Elaborada pelo Conselho Fiscal com base nos demonstrativos de ${rotuloMes(S.todos.slice(-12)[0].mes)} a ${rotuloMes(b.mes)}.</p>
+  <h2>1. Critério</h2><p>Para cada categoria foi calculada a média mensal efetivamente gasta nos últimos 12 meses, acrescida de reajuste de ${String(p.r).replace(".", ",")}%.</p>
+  <h2>2. Valores propostos</h2>
+  <table class="doc-tab"><thead><tr><th>Categoria</th><th class="n">Média real/mês</th><th class="n">Proposta/mês</th><th class="n">Proposta/ano</th></tr></thead><tbody>
+  ${p.linhas.map((l) => `<tr><td>${esc(l.cat)}</td><td class="n">${brl(l.media)}</td><td class="n">${brl(l.prop)}</td><td class="n">${brl(l.prop * 12)}</td></tr>`).join("")}
+  <tr class="sub"><td>Total</td><td class="n">${brl(p.linhas.reduce((s2, l) => s2 + l.media, 0))}</td><td class="n">${brl(p.tot)}</td><td class="n">${brl(p.tot * 12)}</td></tr></tbody></table>
+  <h2>3. Equilíbrio</h2><p>A receita média mensal dos últimos 12 meses foi de ${brl(p.recMed)}. ${p.tot > p.recMed ? `Para cobrir a proposta, a arrecadação mensal precisaria aumentar ${brl(p.tot - p.recMed)} (${pct(p.tot / p.recMed - 1)}).` : `A proposta cabe na arrecadação atual, com sobra de ${brl(p.recMed - p.tot)} por mês.`} Recomenda-se ainda prever a constituição de fundo de reserva.</p>
+  <p class="doc-data">Salvador, ${dataExtenso(hojeISO())}.</p>
+  <div class="assinaturas"><div><span></span>Conselheiro(a) Fiscal</div><div><span></span>Conselheiro(a) Fiscal</div><div><span></span>Conselheiro(a) Fiscal</div></div>`;
+  abrirDoc(`Proposta de orçamento ${p.ano}`, `Proposta-Orcamento-${p.ano}.doc`);
+}
+
+// ---------------------------------------------------------------- fundo de reserva
+const RX_FUNDO = /fundo\s+de\s+reserva|f\.\s?reserva|fdo\.?\s+reserva/i;
+function fundoHTML() {
+  const f = S.fundo || {}, adm = ehAdmin();
+  const ms = S.todos.filter((b) => !f.inicio || b.mes >= f.inicio), perc = f.perc || 0;
+  const lin = ms.map((b) => {
+    const dev = r2(b.totais.receitas * perc / 100);
+    const ident = r2(b.receitas.filter((x) => RX_FUNDO.test(x.desc)).reduce((s2, x) => s2 + x.v, 0) + b.despesas.filter((d) => RX_FUNDO.test(d.desc)).reduce((s2, d) => s2 + d.v, 0));
+    return { mes: b.mes, rec: b.totais.receitas, dev, ident };
+  });
+  const totDev = lin.reduce((s2, l) => s2 + l.dev, 0), totId = lin.reduce((s2, l) => s2 + l.ident, 0);
+  return `<div class="card" id="cardFundo"><div class="cab-secao"><span class="eyebrow">Reserva</span><h2>Fundo de reserva</h2></div>
+    ${adm ? `<form class="form" id="fFundo" style="margin-top:12px">
+      <label>Percentual sobre a receita (%)<input id="fdPerc" inputmode="decimal" value="${perc ? String(perc).replace(".", ",") : ""}" placeholder="conforme a convenção"></label>
+      <label>Contar a partir de<input id="fdIni" type="month" value="${f.inicio || S.todos[0]?.mes || ""}"></label>
+      <label>Saldo informado pela administradora (R$)<input id="fdSaldo" inputmode="decimal" value="${fmtValor(f.saldo || 0)}"></label>
+      <label>Data do saldo informado<input id="fdData" type="date" value="${f.dataSaldo || ""}"></label>
+      <div class="acoes" style="align-self:end"><button class="btn" type="submit">Salvar</button><span class="small muted" id="fdMsg"></span></div></form>` : ""}
+    ${!perc ? `<p class="muted" style="margin-top:12px">${adm ? "Informe o percentual previsto na convenção do condomínio para calcular quanto deveria ter sido reservado." : "O administrador ainda não informou o percentual do fundo de reserva previsto na convenção."}</p>` : `
+    <div class="kpis-sec" style="margin-top:14px">
+      <div class="kpi"><span class="eyebrow">Deveria ter sido reservado</span><b>${brl(totDev)}</b><span class="det">${String(perc).replace(".", ",")}% de ${brl(lin.reduce((s2, l) => s2 + l.rec, 0))} em ${lin.length} mês(es)</span></div>
+      <div class="kpi ${totId < totDev ? "neg" : "pos"}"><span class="eyebrow">Identificado nos balancetes</span><b>${brl(totId)}</b><span class="det">lançamentos com "fundo de reserva"</span></div>
+      <div class="kpi ${(f.saldo || 0) < totDev ? "neg" : "pos"}"><span class="eyebrow">Saldo informado</span><b>${f.saldo ? brl(f.saldo) : "—"}</b><span class="det">${f.dataSaldo ? `em ${dataBR(f.dataSaldo)}` : "não informado"}</span></div>
+    </div>
+    <p class="small" style="margin-top:10px">${totId < totDev ? `<b class="neg">Faltam ${brl(totDev - totId)}</b> em relação ao que a convenção prevê, considerando só o que aparece nos demonstrativos. Vale pedir à administradora o extrato da conta do fundo.` : "O valor identificado cobre o previsto."}</p>`}
+  </div>`;
+}
+
+// ---------------------------------------------------------------- cópia de segurança em Excel (.xlsx sem bibliotecas)
+const CRC_T = (() => { const t = new Uint32Array(256); for (let n = 0; n < 256; n++) { let c = n; for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1; t[n] = c >>> 0; } return t; })();
+const crc32 = (u8) => { let c = 0xffffffff; for (let i = 0; i < u8.length; i++) c = CRC_T[(c ^ u8[i]) & 0xff] ^ (c >>> 8); return (c ^ 0xffffffff) >>> 0; };
+function zipar(arquivos) {
+  const enc = new TextEncoder(), partes = [], central = []; let off = 0;
+  for (const [nome, txt] of arquivos) {
+    const n = enc.encode(nome), d = enc.encode(txt), crc = crc32(d);
+    const h = new DataView(new ArrayBuffer(30)); h.setUint32(0, 0x04034b50, true); h.setUint16(4, 20, true); h.setUint16(6, 0x0800, true); h.setUint32(14, crc, true); h.setUint32(18, d.length, true); h.setUint32(22, d.length, true); h.setUint16(26, n.length, true);
+    partes.push(new Uint8Array(h.buffer), n, d);
+    const c = new DataView(new ArrayBuffer(46)); c.setUint32(0, 0x02014b50, true); c.setUint16(4, 20, true); c.setUint16(6, 20, true); c.setUint16(8, 0x0800, true); c.setUint32(16, crc, true); c.setUint32(20, d.length, true); c.setUint32(24, d.length, true); c.setUint16(28, n.length, true); c.setUint32(42, off, true);
+    central.push(new Uint8Array(c.buffer), n); off += 30 + n.length + d.length;
+  }
+  const tamC = central.reduce((s2, x) => s2 + x.length, 0), e = new DataView(new ArrayBuffer(22));
+  e.setUint32(0, 0x06054b50, true); e.setUint16(8, arquivos.length, true); e.setUint16(10, arquivos.length, true); e.setUint32(12, tamC, true); e.setUint32(16, off, true);
+  return new Blob([...partes, ...central, new Uint8Array(e.buffer)], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
+}
+function xlsx(planilhas) {
+  const x = (v) => String(v ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c])).replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f]/g, "");
+  const col = (i) => { let s2 = ""; i++; while (i) { const m = (i - 1) % 26; s2 = String.fromCharCode(65 + m) + s2; i = Math.floor((i - 1) / 26); } return s2; };
+  const folha = (linhas) => `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetViews><sheetView workbookViewId="0"><pane ySplit="1" topLeftCell="A2" activePane="bottomLeft" state="frozen"/></sheetView></sheetViews><sheetData>${linhas.map((l, r) => `<row r="${r + 1}">${l.map((v, c) => { const ref = col(c) + (r + 1); return typeof v === "number" && isFinite(v) ? `<c r="${ref}"${r ? ' s="1"' : ""}><v>${v}</v></c>` : `<c r="${ref}" t="inlineStr"${r ? "" : ' s="2"'}><is><t xml:space="preserve">${x(v)}</t></is></c>`; }).join("")}</row>`).join("")}</sheetData></worksheet>`;
+  const nomes = planilhas.map((p) => p[0].replace(/[\\/?*[\]:]/g, "").slice(0, 31));
+  const arqs = [
+    ["[Content_Types].xml", `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/><Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/>${nomes.map((_, i) => `<Override PartName="/xl/worksheets/sheet${i + 1}.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>`).join("")}</Types>`],
+    ["_rels/.rels", `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>`],
+    ["xl/workbook.xml", `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets>${nomes.map((n, i) => `<sheet name="${x(n)}" sheetId="${i + 1}" r:id="rId${i + 1}"/>`).join("")}</sheets></workbook>`],
+    ["xl/_rels/workbook.xml.rels", `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">${nomes.map((_, i) => `<Relationship Id="rId${i + 1}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet${i + 1}.xml"/>`).join("")}<Relationship Id="rId${nomes.length + 1}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/></Relationships>`],
+    ["xl/styles.xml", `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><numFmts count="1"><numFmt numFmtId="164" formatCode="#,##0.00"/></numFmts><fonts count="2"><font><sz val="11"/><name val="Calibri"/></font><font><b/><sz val="11"/><name val="Calibri"/></font></fonts><fills count="2"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill></fills><borders count="1"><border/></borders><cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs><cellXfs count="3"><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/><xf numFmtId="164" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1"/><xf numFmtId="0" fontId="1" fillId="0" borderId="0" xfId="0" applyFont="1"/></cellXfs><cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles></styleSheet>`],
+    ...planilhas.map((p, i) => [`xl/worksheets/sheet${i + 1}.xml`, folha(p[1])]),
+  ];
+  return zipar(arqs);
+}
+function baixarBackup() {
+  const T = S.todos;
+  const anot = Object.entries(S.acomp).filter(([k, e]) => !k.startsWith("chk:") && !k.startsWith("ag:") && !e.migradoPara && (e.resposta || e.status));
+  const pl = [
+    ["Resumo mensal", [["Mês", "Receitas", "Despesas", "Resultado", "Saldo anterior", "Saldo final", "Emitido em"], ...T.map((b) => [rotuloMes(b.mes), b.totais.receitas, b.totais.despesas, r2(b.totais.receitas - b.totais.despesas), b.totais.saldoAnterior ?? 0, b.totais.saldoAtual, b.emissao || ""])]],
+    ["Receitas", [["Mês", "Descrição", "Valor"], ...T.flatMap((b) => b.receitas.map((r) => [rotuloMes(b.mes), r.desc, r.v]))]],
+    ["Despesas", [["Mês", "Categoria", "Fornecedor", "Histórico", "Mês ref.", "Baixa", "Tipo", "NF", "Valor"], ...T.flatMap((b) => b.despesas.map((d) => [rotuloMes(b.mes), d.cat, d.forn, d.desc, d.ref, d.baixa, d.tipo, d.nf, d.v]))]],
+    ["Anotações", [["Alerta", "Situação", "Aguardando resposta de", "Enviado em", "Prazo", "Resposta/anotação", "Links", "Última alteração", "Por"], ...anot.map(([k, e]) => [e.snap?.titulo || k, SITUACOES[e.status || "pendente"], e.responsavel || "", dataBR(e.enviado), dataBR(e.prazo), e.resposta || "", (e.links || []).map((l) => l.url).join(" "), e.ts ? horaBR(e.ts) : e.data || "", e.por || ""])]],
+    ["Conferência mensal", [["Mês", "Extrato", "Notas fiscais", "Notas explicativas", "Aprovado"], ...T.map((b) => { const c = S.acomp[`chk:${b.mes}`] || {}; return [rotuloMes(b.mes), c.extrato || "", c.nf || "", c.notas || "", c.aprovado || ""]; })]],
+    ["Previsões", [["Previsão", "De", "Até", "Categoria", "Valor mensal"], ...(S.orc || []).flatMap((p) => Object.entries(p.cats).map(([c, v]) => [p.nome, rotuloMes(p.de), rotuloMes(p.ate), c, v]))]],
+    ["Contratos", [["Fornecedor", "Objeto", "Valor mensal", "Início", "Fim", "Reajuste"], ...(S.contratos || []).map((c) => [c.forn, c.objeto || "", c.valor, c.inicio ? rotuloMes(c.inicio) : "", dataBR(c.fim), c.reajuste || ""])]],
+    ["Agenda", [["Data", "Hora", "Tipo", "Título", "Local", "Observação"], ...itensAgenda().map((a) => [dataBR(a.data), a.hora || "", TIPOS_AG[a.tipo] || "", a.titulo, a.local || "", a.obs || ""])]],
+  ];
+  const blob = xlsx(pl), a = document.createElement("a");
+  a.href = URL.createObjectURL(blob); a.download = `Conselho-Fiscal-Farol-copia-${hojeISO()}.xlsx`;
+  document.body.appendChild(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1000);
+  registrar("Baixou cópia em Excel");
+}
+
+// ---------------------------------------------------------------- registro de acessos (administração)
+async function listarRegistros() {
+  const el = $("#tabRegistros"); if (!el || !AC.ligado || !ehAdmin()) return;
+  el.innerHTML = `<tbody><tr><td class="muted">Carregando…</td></tr></tbody>`;
+  try {
+    const regs = await lerRegistros(400); S.registros = regs;
+    const pessoas = [...new Set(regs.map((r) => r.nome || r.usuario))].sort();
+    const f = $("#regPessoa"); const v = f.value; f.innerHTML = `<option value="">Todas as pessoas</option>${pessoas.map((p) => `<option ${p === v ? "selected" : ""}>${esc(p)}</option>`).join("")}`;
+    pintarRegistros();
+  } catch (e) { el.innerHTML = `<tbody><tr><td>${/permission|insufficient/.test(e.code || "") ? "Para ver o registro, atualize as regras do Firestore: clique em <b>Copiar regras</b> logo acima, cole na aba Regras do Firestore e publique." : esc(mensagemErro(e))}</td></tr></tbody>`; }
+}
+function pintarRegistros() {
+  const p = $("#regPessoa").value, regs = (S.registros || []).filter((r) => !p || (r.nome || r.usuario) === p);
+  const dt = (t) => { try { return t && t.toDate ? t.toDate().toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" }) : "—"; } catch { return "—"; } };
+  $("#tabRegistros").innerHTML = regs.length ? `<thead><tr><th>Data e hora</th><th>Pessoa</th><th>Ação</th><th>Detalhe</th></tr></thead><tbody>${regs.map((r) => `<tr><td class="num">${dt(r.ts)}</td><td>${esc(r.nome || r.usuario)}</td><td>${esc(r.acao)}</td><td class="mini">${esc(r.detalhe || "")}</td></tr>`).join("")}</tbody>` : `<tbody><tr><td class="muted">Nenhum registro ainda.</td></tr></tbody>`;
 }
 
 // ---------------------------------------------------------------- acesso com usuário e senha
@@ -1120,7 +1432,7 @@ async function iniciarAcesso(cfg) {
       const reg = await lerPerfil(user);
       if (!reg || reg.ativo !== true) { S.msgSaida = "Seu acesso está desativado ou foi substituído. Fale com o administrador."; await sair(); return; }
       if (reg.trocarSenha) { telaAcesso("fTroca"); return; }
-      registrarAcesso();
+      registrarAcesso(); registrar("Entrou no site");
       const dados = await lerDados();
       await carregarBase(dados);
       aplicarPerfil(); rota(); telaAcesso(null); render(); prepararAdmin(); avisoVencidos();
@@ -1153,7 +1465,7 @@ $("#fTroca").addEventListener("submit", async (e) => {
   if (nova !== rep) return telaAcesso("fTroca", "As duas senhas não são iguais.");
   const v = validarSenha(nova, S.senhaLogin); if (v) return telaAcesso("fTroca", v);
   try {
-    await trocarSenha(nova); S.senhaLogin = "";
+    await trocarSenha(nova); S.senhaLogin = ""; registrar("Criou a própria senha (1º acesso)");
     $("#trNova").value = $("#trRepete").value = "";
     telaAcesso("carregando", "Senha criada. Entrando…", true);
     const dados = await lerDados(); await carregarBase(dados);
@@ -1171,7 +1483,7 @@ $("#fPrimeiro").addEventListener("submit", async (e) => {
   catch (err) { telaAcesso("fPrimeiro", mensagemErro(err)); }
 });
 document.addEventListener("click", async (e) => {
-  if (e.target.closest("[data-sair]")) { S.msgSaida = ""; ls.del(LS_ACOMP); ls.del(LS_MESES); await sair(); return; }
+  if (e.target.closest("[data-sair]")) { await registrar("Saiu do site"); S.msgSaida = ""; ls.del(LS_ACOMP); ls.del(LS_MESES); await sair(); return; }
   if (e.target.closest("#btnMinhaSenha")) { $("#trocaPropria").hidden = false; $("#tpAtual").focus(); }
 });
 
@@ -1210,8 +1522,94 @@ document.addEventListener("submit", async (e) => {
   const prev = { id, nome: $("#orcNome").value.trim(), de, ate, receita: parseValor($("#orcRec").value), cats, por: nomeUsuario(), ts: new Date().toISOString() };
   const antes = S.orc; S.orc = [...S.orc.filter((x) => x.id !== id), prev].sort((a, b) => a.de.localeCompare(b.de));
   $("#orcMsg").textContent = "Salvando…";
-  try { await salvarOrc(); S.orcEditando = undefined; S.orcSel = id; render(); toast("Previsão orçamentária salva."); }
+  try { await salvarOrc(); registrar("Salvou previsão orçamentária", prev.nome); S.orcEditando = undefined; S.orcSel = id; render(); toast("Previsão orçamentária salva."); }
   catch (err) { S.orc = antes; $("#orcMsg").textContent = mensagemErro(err); }
+});
+$("#bannerNovoVer").addEventListener("click", () => { marcarVisto(); location.hash = "#resumo"; });
+$("#bannerNovoFechar").addEventListener("click", marcarVisto);
+$("#btnGerarAta").addEventListener("click", gerarAta);
+for (const id of ["#btnBackup", "#btnBackup2"]) $(id)?.addEventListener("click", baixarBackup);
+$("#regPessoa").addEventListener("change", pintarRegistros);
+$("#regAtualizar").addEventListener("click", listarRegistros);
+$("#copiarRegras2").addEventListener("click", () => navigator.clipboard.writeText(REGRAS).then(() => toast("Regras copiadas."), () => toast("Selecione o texto das regras e copie com Ctrl+C.")));
+document.addEventListener("input", (e) => {
+  if (e.target.id === "propReaj") { const v = parseValor(e.target.value); if (v >= 0 && v <= 100) { S.propReaj = v; clearTimeout(S.tProp); S.tProp = setTimeout(() => { orcExtras(); const i = $("#propReaj"); i.focus(); i.setSelectionRange(i.value.length, i.value.length); }, 500); } }
+});
+document.addEventListener("change", (e) => { if (e.target.id === "propInv") { S.propInv = e.target.checked; orcExtras(); } });
+document.addEventListener("click", async (e) => {
+  const t = e.target;
+  // links de documentos
+  const la = t.closest("[data-link-add]");
+  if (la) {
+    if (!pode()) return;
+    const ch = la.dataset.linkAdd, url = (document.querySelector(`[data-link-url="${ch}"]`).value || "").trim(), nome = (document.querySelector(`[data-link-nome="${ch}"]`).value || "").trim();
+    if (!urlValida(url)) return toast("Cole um link completo, começando com https://");
+    const e2 = S.acomp[ch] || {};
+    salvarAcomp(ch, { links: [...(e2.links || []), { url, nome, por: nomeUsuario(), ts: new Date().toISOString() }] }, `anexou o link ${nome || url}`);
+    const y = scrollY; render(); scrollTo(0, y); return;
+  }
+  const ld = t.closest("[data-link-del]");
+  if (ld) {
+    if (!pode()) return;
+    const ch = ld.dataset.linkDel, e2 = S.acomp[ch] || {}, l = (e2.links || [])[+ld.dataset.i];
+    salvarAcomp(ch, { links: (e2.links || []).filter((_, i) => i !== +ld.dataset.i) }, `removeu o link ${l ? l.nome || l.url : ""}`);
+    const y = scrollY; render(); scrollTo(0, y); return;
+  }
+  // agenda
+  const ad = t.closest("[data-ag-del]");
+  if (ad && pode()) {
+    const k = ad.dataset.agDel; S.acomp[k] = { ...S.acomp[k], removido: true, ts: new Date().toISOString(), por: nomeUsuario() };
+    ls.set(LS_ACOMP, S.acomp); agendarSync(); registrar("Removeu compromisso", S.acomp[k].titulo); render(); return;
+  }
+  // contratos
+  const ce = t.closest("[data-ct-edit]"); if (ce) { S.ctEditando = ce.dataset.ctEdit; contratosTab(); $("#fContrato").scrollIntoView({ block: "center" }); return; }
+  if (t.closest("#ctCancelar")) { S.ctEditando = ""; contratosTab(); return; }
+  const cs = t.closest("[data-ct-sug]"); if (cs) { S.ctEditando = ""; contratosTab(); $("#ctForn").value = cs.dataset.ctSug; $("#ctValor").value = fmtValor(+cs.dataset.v); $("#fContrato").scrollIntoView({ block: "center" }); $("#ctObj").focus(); return; }
+  const cd = t.closest("[data-ct-del]");
+  if (cd) {
+    if (cd.dataset.conf !== "1") { cd.dataset.conf = "1"; cd.textContent = "Confirmar?"; setTimeout(() => { cd.dataset.conf = ""; cd.textContent = "Excluir"; }, 4000); return; }
+    const c = S.contratos.find((x) => x.id === cd.dataset.ctDel); S.contratos = S.contratos.filter((x) => x.id !== cd.dataset.ctDel);
+    try { await salvarConteudo("contratos"); registrar("Excluiu contrato", c?.forn); toast("Contrato excluído."); } catch (err) { toast(mensagemErro(err)); }
+    render(); return;
+  }
+  // proposta de orçamento
+  if (t.closest("#propDoc")) { docProposta(); return; }
+  if (t.closest("#propSalvar")) {
+    const p = S.proposta; if (!p) return;
+    const de = `${p.ano}-01`, ate = `${p.ano}-12`;
+    if (S.orc.some((x) => !(ate < x.de || de > x.ate))) return toast(`Já existe previsão cobrindo ${p.ano}. Edite-a em "Editar previsão".`);
+    const prev = { id: novoId(), nome: `Previsão ${p.ano} (proposta com reajuste de ${String(p.r).replace(".", ",")}%)`, de, ate, receita: r2(p.tot), cats: Object.fromEntries(p.linhas.map((l) => [l.cat, l.prop])), por: nomeUsuario(), ts: new Date().toISOString() };
+    S.orc = [...S.orc, prev].sort((a, b) => a.de.localeCompare(b.de));
+    try { await salvarOrc(); registrar("Salvou previsão orçamentária", prev.nome); toast(`Previsão ${p.ano} salva. Ela passa a valer quando houver balancetes de ${p.ano}.`); } catch (err) { toast(mensagemErro(err)); }
+    render(); return;
+  }
+});
+document.addEventListener("submit", async (e) => {
+  const f = e.target;
+  if (f.id === "fAgenda") {
+    e.preventDefault(); if (!pode()) return;
+    const id = "ag:" + novoId();
+    S.acomp[id] = { data: $("#agData").value, hora: $("#agHora").value, tipo: $("#agTipo").value, titulo: $("#agTitulo").value.trim(), local: $("#agLocal").value.trim(), obs: $("#agObs").value.trim(), por: nomeUsuario(), ts: new Date().toISOString() };
+    ls.set(LS_ACOMP, S.acomp); agendarSync(); registrar("Adicionou compromisso", `${dataBR(S.acomp[id].data)} · ${S.acomp[id].titulo}`); toast("Compromisso adicionado."); render(); return;
+  }
+  if (f.id === "fContrato") {
+    e.preventDefault(); if (!ehAdmin()) return;
+    const valor = parseValor($("#ctValor").value), forn = $("#ctForn").value.trim();
+    if (!forn || !valor) return ($("#ctMsg").textContent = "Informe o fornecedor e o valor mensal.");
+    const id = f.dataset.id || novoId();
+    const c = { id, forn, objeto: $("#ctObj").value.trim(), valor, inicio: $("#ctIni").value, fim: $("#ctFim").value, reajuste: $("#ctReaj").value.trim(), tol: parseValor($("#ctTol").value) || 2, por: nomeUsuario(), ts: new Date().toISOString() };
+    const antes = S.contratos; S.contratos = [...S.contratos.filter((x) => x.id !== id), c].sort((a, b) => a.forn.localeCompare(b.forn, "pt-BR"));
+    try { await salvarConteudo("contratos"); registrar(f.dataset.id ? "Alterou contrato" : "Cadastrou contrato", `${forn} · ${brl(valor)}`); S.ctEditando = ""; toast("Contrato salvo."); render(); }
+    catch (err) { S.contratos = antes; $("#ctMsg").textContent = mensagemErro(err); }
+    return;
+  }
+  if (f.id === "fFundo") {
+    e.preventDefault(); if (!ehAdmin()) return;
+    const antes = S.fundo;
+    S.fundo = { perc: parseValor($("#fdPerc").value), inicio: $("#fdIni").value, saldo: parseValor($("#fdSaldo").value), dataSaldo: $("#fdData").value, por: nomeUsuario(), ts: new Date().toISOString() };
+    try { await salvarConteudo("fundo"); registrar("Atualizou fundo de reserva", `${S.fundo.perc}%`); toast("Fundo de reserva atualizado."); orcExtras(); }
+    catch (err) { S.fundo = antes; $("#fdMsg").textContent = mensagemErro(err); }
+  }
 });
 $("#tpCancelar").addEventListener("click", () => ($("#trocaPropria").hidden = true));
 $("#fTrocaPropria").addEventListener("submit", async (e) => {
@@ -1220,7 +1618,7 @@ $("#fTrocaPropria").addEventListener("submit", async (e) => {
   const erro = (t) => { m.hidden = false; m.className = "acesso-msg"; m.textContent = t; };
   if (nova !== $("#tpRepete").value) return erro("As duas senhas não são iguais.");
   const v = validarSenha(nova, $("#tpAtual").value); if (v) return erro(v);
-  try { await trocarSenha(nova, $("#tpAtual").value); $("#trocaPropria").hidden = true; ["#tpAtual", "#tpNova", "#tpRepete"].forEach((i) => ($(i).value = "")); m.hidden = true; toast("Senha alterada."); }
+  try { await trocarSenha(nova, $("#tpAtual").value); registrar("Alterou a própria senha"); $("#trocaPropria").hidden = true; ["#tpAtual", "#tpNova", "#tpRepete"].forEach((i) => ($(i).value = "")); m.hidden = true; toast("Senha alterada."); }
   catch (err) { erro(mensagemErro(err)); }
 });
 
@@ -1229,7 +1627,7 @@ function prepararAdmin() {
   $("#admSemFirebase").hidden = AC.ligado;
   $("#admComFirebase").hidden = !AC.ligado;
   $("#txtRegras").textContent = REGRAS;
-  if (AC.ligado && ehAdmin()) { listarUsuarios(); infoMigracao(); }
+  if (AC.ligado && ehAdmin()) { listarUsuarios(); infoMigracao(); listarRegistros(); }
 }
 const dataHora = (t) => { try { return t && t.toDate ? t.toDate().toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" }) : "—"; } catch { return "—"; } };
 async function listarUsuarios() {
@@ -1257,26 +1655,26 @@ $("#fNovoAcesso").addEventListener("submit", async (e) => {
   const b = e.submitter || $("#fNovoAcesso button"); b.disabled = true; b.textContent = "Criando…";
   try {
     const c = await criarAcesso({ nome: $("#naNome").value.trim(), usuario: $("#naUsuario").value, perfil: $("#naPerfil").value });
-    mostrarCredencial(c, `Acesso criado: ${$("#naNome").value.trim()}`);
+    mostrarCredencial(c, `Acesso criado: ${$("#naNome").value.trim()}`); registrar("Criou acesso", `${c.usuario} (${PERFIS[$("#naPerfil").value]})`);
     $("#naNome").value = $("#naUsuario").value = ""; listarUsuarios();
   } catch (err) { toast(mensagemErro(err)); }
   b.disabled = false; b.textContent = "Criar acesso com senha provisória";
 });
 document.addEventListener("change", async (e) => {
   const t = e.target;
-  if (t.dataset && t.dataset.perfilUid) { try { await atualizarAcesso(t.dataset.perfilUid, { perfil: t.value }); toast("Perfil alterado."); } catch (err) { toast(mensagemErro(err)); listarUsuarios(); } }
+  if (t.dataset && t.dataset.perfilUid) { try { await atualizarAcesso(t.dataset.perfilUid, { perfil: t.value }); toast("Perfil alterado."); registrar("Alterou perfil", `${t.closest("tr")?.cells[1]?.textContent || ""} → ${PERFIS[t.value]}`); } catch (err) { toast(mensagemErro(err)); listarUsuarios(); } }
 });
 document.addEventListener("click", async (e) => {
   const r = e.target.closest("[data-reset]");
   if (r) {
     if (r.dataset.conf !== "1") { r.dataset.conf = "1"; r.textContent = "Confirmar nova senha?"; setTimeout(() => { r.dataset.conf = ""; r.textContent = "Nova senha provisória"; }, 4000); return; }
     r.disabled = true;
-    try { const c = await novaSenhaProvisoria(r.dataset.reset); mostrarCredencial(c, `Nova senha provisória para ${c.usuario}`); listarUsuarios(); }
+    try { const c = await novaSenhaProvisoria(r.dataset.reset); mostrarCredencial(c, `Nova senha provisória para ${c.usuario}`); registrar("Gerou nova senha provisória", c.usuario); listarUsuarios(); }
     catch (err) { toast(mensagemErro(err)); r.disabled = false; }
     return;
   }
   const at = e.target.closest("[data-ativo]");
-  if (at) { try { await atualizarAcesso(at.dataset.ativo, { ativo: at.dataset.v === "1" }); toast(at.dataset.v === "1" ? "Acesso reativado." : "Acesso desativado."); listarUsuarios(); } catch (err) { toast(mensagemErro(err)); } return; }
+  if (at) { try { await atualizarAcesso(at.dataset.ativo, { ativo: at.dataset.v === "1" }); toast(at.dataset.v === "1" ? "Acesso reativado." : "Acesso desativado."); registrar(at.dataset.v === "1" ? "Reativou acesso" : "Desativou acesso", at.closest("tr")?.cells[1]?.textContent || ""); listarUsuarios(); } catch (err) { toast(mensagemErro(err)); } return; }
   if (e.target.closest("#copiarCred")) { navigator.clipboard.writeText($("#credTxt").innerText).then(() => toast("Copiado."), () => { const g = document.createRange(); g.selectNodeContents($("#credTxt")); const sl = getSelection(); sl.removeAllRanges(); sl.addRange(g); toast("Selecionado. Use Ctrl+C."); }); return; }
   if (e.target.closest("#copiarRegras")) { navigator.clipboard.writeText(REGRAS).then(() => toast("Regras copiadas."), () => { const g = document.createRange(); g.selectNodeContents($("#txtRegras")); const sl = getSelection(); sl.removeAllRanges(); sl.addRange(g); toast("Selecionado. Use Ctrl+C."); }); return; }
   if (e.target.closest("#btnAtivarLogin")) { ativarLogin(); return; }
@@ -1347,7 +1745,7 @@ async function removerPublicos() {
 }
 
 // ---------------------------------------------------------------- navegação e eventos
-const ABAS = ["resumo", "orcamento", "painel", "analises", "mes", "projecao", "categorias", "fornecedores", "acompanhamento", "alertas", "parcelas", "lancamentos", "notas", "conselho", "administracao", "dados"];
+const ABAS = ["resumo", "orcamento", "agenda", "contratos", "painel", "analises", "mes", "projecao", "categorias", "fornecedores", "acompanhamento", "alertas", "parcelas", "lancamentos", "notas", "conselho", "administracao", "dados"];
 function rota() {
   const vis = AC.ligado && AC.perfil === "visualizacao";
   let a = ABAS.includes(location.hash.slice(1)) ? location.hash.slice(1) : vis ? "resumo" : "painel";

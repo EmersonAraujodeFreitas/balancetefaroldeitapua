@@ -156,6 +156,8 @@ button:disabled { opacity: 0.5; cursor: default; }
 .log .ok { background: var(--ok-soft); color: var(--ok); }
 .form { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 200px), 1fr)); gap: 10px; }
 .form label { display: grid; gap: 4px; font-size: 0.9rem; color: var(--ink); font-weight: 600; }
+.form input, .form select, #ataMes { font: inherit; font-size: .95rem; font-weight: 400; border: 1px solid var(--line-2); border-radius: 6px; padding: 8px 10px; background: #fff; color: var(--ink); width: 100%; min-height: 40px; }
+.form input:focus, .form select:focus { outline: 2px solid #9fc0d8; border-color: var(--accent); }
 .acoes { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
 
 .texto { max-width: 74ch; display: grid; gap: 10px; align-content: start; }
@@ -525,6 +527,29 @@ b.neg, td.neg { color: #b4231a; } td.pos { color: #1d7a4b; }
   @page { size: A4; margin: 18mm 16mm; }
 }
 @media (max-width: 900px) { .resumo-nums { grid-template-columns: repeat(2, minmax(0, 1fr)); } .assinaturas { grid-template-columns: 1fr; } .folha { padding: 18px; } }
+
+/* ===== agenda, contratos, links, banner */
+.banner-novo { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 16px; padding: 12px 18px; border-radius: var(--r); background: #fff7e0; border: 1px solid #fbb812; color: var(--ink); }
+.banner-novo .bn-ic { color: var(--farol); font-size: 1.1rem; }
+.banner-novo .btn { margin-left: auto; }
+.link-x { border: 0; background: none; font-size: 1.2rem; line-height: 1; color: var(--muted); cursor: pointer; padding: 2px 6px; border-radius: 4px; }
+.link-x:hover { background: #eef1f4; color: #a1281c; }
+.links-doc ul { list-style: none; margin: 4px 0 0; padding: 0; display: grid; gap: 4px; font-size: .9rem; }
+.links-doc a { color: var(--accent); font-weight: 600; word-break: break-all; }
+.links-doc a::before { content: "📎 "; }
+.link-add { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1fr) auto; gap: 8px; margin-top: 6px; }
+.link-add input { font: inherit; font-size: .88rem; border: 1px solid var(--line-2); border-radius: 6px; padding: 6px 8px; }
+.agenda { list-style: none; margin: 12px 0 0; padding: 0; display: grid; gap: 8px; }
+.ag { display: grid; grid-template-columns: 58px minmax(0, 1fr) auto; gap: 12px; align-items: center; padding: 10px 12px; border: 1px solid var(--line); border-left: 4px solid var(--accent); border-radius: 8px; background: #fff; }
+.ag.reuniao { border-left-color: var(--brand); } .ag.assembleia { border-left-color: var(--gold); } .ag.prazo { border-left-color: var(--farol); }
+.ag-data { text-align: center; line-height: 1.1; } .ag-data b { display: block; font-size: 1.35rem; color: var(--brand); } .ag-data span { font-size: .75rem; text-transform: uppercase; color: var(--muted); }
+.ag-txt { display: grid; gap: 2px; } .ag-quando { font-size: .85rem; color: var(--muted); white-space: nowrap; display: flex; align-items: center; gap: 6px; }
+.chips { display: flex; flex-wrap: wrap; gap: 2px; max-width: 170px; margin: 0 0 3px auto; }
+.chip { width: 9px; height: 14px; border-radius: 2px; background: #cfd8e0; }
+.chip.ok { background: #2a9d8f; } .chip.dif { background: #e0a100; } .chip.ausente { background: #d9663a; }
+.grupo-av { list-style: none; font-size: .78rem; font-weight: 800; text-transform: uppercase; letter-spacing: .05em; color: var(--brand); padding: 6px 0 0 !important; border: 0 !important; background: none !important; }
+#cardProposta input, #cardFundo input { font: inherit; border: 1px solid var(--line-2); border-radius: 6px; padding: 6px 8px; }
+@media (max-width: 700px) { .link-add { grid-template-columns: minmax(0, 1fr); } .ag { grid-template-columns: 48px minmax(0, 1fr); } .ag-quando { grid-column: 2; } }
 </style>
 </head>
 <body>
@@ -579,10 +604,12 @@ b.neg, td.neg { color: #b4231a; } td.pos { color: #1d7a4b; }
     <div class="grupo">Detalhamento</div>
     <a href="#categorias"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3a9 9 0 1 0 9 9h-9z"/><path d="M15 3.5A9 9 0 0 1 20.5 9H15z"/></svg><span>Categorias</span></a>
     <a href="#orcamento"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20V10M10 20V4M16 20v-8"/><path d="M2 8h20" stroke-dasharray="3 2"/></svg><span>Orçado x realizado</span></a>
+    <a href="#contratos"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3h9l4 4v14H6z"/><path d="M14 3v5h5M9 13h7M9 17h5"/></svg><span>Contratos</span></a>
     <a href="#fornecedores"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 21V8l9-5 9 5v13"/><path d="M9 21v-7h6v7"/></svg><span>Fornecedores</span></a>
     <a href="#lancamentos"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/></svg><span>Lançamentos</span></a>
     <a href="#parcelas"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20M6 15h4"/></svg><span>Parcelas a vencer</span></a>
     <div class="grupo">Fiscalização</div>
+    <a href="#agenda"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/></svg><span>Agenda</span></a>
     <a href="#acompanhamento"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="4" width="16" height="17" rx="2"/><path d="M9 3h6v3H9zM8 11l2 2 4-4M8 17h8"/></svg><span>Acompanhamento</span><span class="cnt" id="cntVenc" hidden></span></a>
     <a href="#alertas"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l10 18H2z"/><path d="M12 10v5M12 18h.01"/></svg><span>Alertas</span><span class="cnt" id="cntAlertas"></span></a>
     <a href="#notas"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><path d="M14 3v6h6M8 13h8M8 17h5"/></svg><span>Notas da administradora</span></a>
@@ -616,6 +643,9 @@ b.neg, td.neg { color: #b4231a; } td.pos { color: #1d7a4b; }
 
 <main><div class="wrap">
 
+<div class="banner-novo" id="bannerNovo" hidden><span class="bn-ic" aria-hidden="true">●</span><span id="bannerNovoTxt"></span>
+  <button class="btn" type="button" id="bannerNovoVer">Ver resumo</button><button class="link-x" type="button" id="bannerNovoFechar" aria-label="Fechar aviso">×</button></div>
+
 <section data-aba="resumo" hidden>
   <div class="cab"><div class="cab-secao"><span class="eyebrow">Visão rápida</span><h2>Como ficaram as contas</h2></div>
     <label class="small">Mês <select id="resumoMesSel" class="sel-parecer"></select></label></div>
@@ -624,6 +654,18 @@ b.neg, td.neg { color: #b4231a; } td.pos { color: #1d7a4b; }
 
 <section data-aba="orcamento" hidden>
   <div id="secOrcamento"></div>
+  <div id="secOrcExtra"></div>
+</section>
+
+<section data-aba="agenda" hidden>
+  <div class="cab-secao"><span class="eyebrow">Fiscalização</span><h2>Agenda do conselho</h2></div>
+  <div id="secAgenda"></div>
+</section>
+
+<section data-aba="contratos" hidden>
+  <div class="cab-secao"><span class="eyebrow">Detalhamento</span><h2>Contratos e pagamentos</h2></div>
+  <p class="small muted" style="margin-top:-6px">Compara o valor de cada contrato com o que foi pago mês a mês nos balancetes.</p>
+  <div id="secContratos"></div>
 </section>
 
 <section data-aba="painel">
@@ -761,6 +803,17 @@ b.neg, td.neg { color: #b4231a; } td.pos { color: #1d7a4b; }
     <div class="oficio-ctl"><label class="small">Mês <select id="docMes" class="sel-parecer"></select></label>
       <label class="small">Parecer <select id="docParecerSel" class="sel-parecer"><option value="auto">Automático</option><option value="validado">Favorável</option><option value="ressalvas">Favorável com ressalvas</option><option value="analise">Em análise</option><option value="nao">Desfavorável</option></select></label>
       <button class="btn" type="button" id="btnGerarDoc">Gerar documento</button></div></div>
+  <div class="card so-editor"><div class="cab"><div class="cab-secao"><span class="eyebrow">Documento</span><h2>Ata da reunião</h2></div></div>
+    <p class="small muted" style="margin:6px 0 12px">Monta a ata com o demonstrativo do mês, as pendências, as respostas recebidas e os encaminhamentos. Preencha os presentes e as deliberações; o resto vem dos dados.</p>
+    <div class="form">
+      <label>Data<input type="date" id="ataData"></label><label>Horário<input type="time" id="ataHora"></label>
+      <label>Local<input id="ataLocal" placeholder="ex.: salão de festas"></label><label>Balancete analisado<select id="ataMes"></select></label>
+    </div>
+    <div class="grid2" style="margin-top:10px">
+      <label class="small" style="display:grid;gap:6px;font-weight:600">Presentes (um por linha)<textarea id="ataPresentes" rows="4" class="whats-txt"></textarea></label>
+      <label class="small" style="display:grid;gap:6px;font-weight:600">Deliberações (uma por linha)<textarea id="ataDelib" rows="4" class="whats-txt" placeholder="ex.: Solicitar à administradora o extrato da conta do fundo de reserva"></textarea></label>
+    </div>
+    <div class="acoes" style="margin-top:10px"><button class="btn" type="button" id="btnGerarAta">Gerar ata</button></div></div>
   <div id="analiseCurada"></div>
 </section>
 
@@ -810,6 +863,14 @@ b.neg, td.neg { color: #b4231a; } td.pos { color: #1d7a4b; }
     <div class="cab-secao"><span class="eyebrow">Usuários</span><h2>Acessos cadastrados</h2></div>
     <div class="tabela"><table id="tabAcessos"></table></div>
 
+    <div class="card"><div class="cab"><div class="cab-secao"><span class="eyebrow">Auditoria</span><h2>Registro de acessos e alterações</h2></div>
+      <div class="acoes"><select id="regPessoa" class="sel-parecer"><option value="">Todas as pessoas</option></select><button class="btn sec" type="button" id="regAtualizar">Atualizar</button></div></div>
+      <p class="small muted" style="margin:6px 0 10px">Entradas, saídas e cada alteração feita no site, com nome e horário. Ninguém consegue editar ou apagar este registro.</p>
+      <div class="tabela" style="max-height:460px;overflow:auto"><table id="tabRegistros"></table></div></div>
+    <div class="card"><div class="cab"><div class="cab-secao"><span class="eyebrow">Segurança</span><h2>Regras do Firestore</h2></div><button class="btn sec" type="button" id="copiarRegras2">Copiar regras</button></div>
+      <p class="small muted" style="margin:6px 0 0">Quando o site ganhar uma função nova que precise de permissão, cole estas regras na aba <b>Regras</b> do Firestore e clique em Publicar.</p></div>
+    <div class="card"><div class="cab"><div class="cab-secao"><span class="eyebrow">Cópia de segurança</span><h2>Baixar tudo em Excel</h2></div><button class="btn" type="button" id="btnBackup">Baixar cópia (.xlsx)</button></div>
+      <p class="small muted" style="margin:6px 0 0">Balancetes, receitas, despesas, anotações, conferência mensal, previsões, contratos e agenda, cada um numa aba.</p></div>
     <div class="card"><div class="cab-secao"><span class="eyebrow">Dados</span><h2>Base protegida</h2></div>
       <p class="small muted" style="margin:6px 0 12px" id="migraInfo"></p>
       <div class="acoes"><button class="btn" type="button" id="btnMigrar">Copiar balancetes e anotações para a base protegida</button>
@@ -837,6 +898,7 @@ b.neg, td.neg { color: #b4231a; } td.pos { color: #1d7a4b; }
     <div class="tabela" style="margin-top:10px"><table id="tabMeses"></table></div>
   </div>
 
+  <div class="card"><div class="cab"><div class="cab-secao"><span class="eyebrow">Cópia de segurança</span><h2>Baixar tudo em Excel</h2></div><button class="btn sec" type="button" id="btnBackup2">Baixar cópia (.xlsx)</button></div></div>
   <div class="card" id="cfgGithub" style="display:grid;gap:12px">
     <h3>Compartilhar com o conselho pelo GitHub</h3>
     <p class="small muted">Meses importados e anotações do acompanhamento ficam guardados neste navegador. Para que apareçam para todo o conselho, preencha os campos abaixo uma única vez: a partir daí cada anotação é enviada sozinha ao repositório.</p>
@@ -882,15 +944,15 @@ b.neg, td.neg { color: #b4231a; } td.pos { color: #1d7a4b; }
 </div>
 <div class="acesso" id="avisoVenc" hidden style="background:rgba(4,40,63,.72)">
   <div class="acesso-caixa aviso-caixa" role="alertdialog" aria-labelledby="avisoTitulo">
-    <span class="eyebrow" style="color:var(--farol)">Prazo vencido</span>
+    <span class="eyebrow" style="color:var(--farol)" id="avisoEyebrow">Prazo vencido</span>
     <h1 id="avisoTitulo" style="margin:0;font-size:1.25rem"></h1>
-    <p class="small" style="margin:0">A administradora não respondeu no prazo combinado. Vale cobrar a resposta.</p>
+    <p class="small" style="margin:0" id="avisoSub"></p>
     <ul class="lista-pend" id="avisoLista"></ul>
     <div class="acoes"><button class="btn" type="button" id="avisoIr">Ver pendências</button><button class="btn sec" type="button" id="avisoFechar">Fechar</button></div>
   </div>
 </div>
 <div class="doc-overlay" id="docParecer" hidden>
-  <div class="doc-barra"><b>Parecer do Conselho Fiscal</b><span class="small">Clique no texto para ajustar antes de imprimir.</span>
+  <div class="doc-barra"><b id="docTitulo">Parecer do Conselho Fiscal</b><span class="small">Clique no texto para ajustar antes de imprimir.</span>
     <div class="acoes"><button class="btn" type="button" id="docImprimir">Imprimir / salvar PDF</button><button class="btn sec" type="button" id="docWord">Baixar Word</button><button class="btn sec" type="button" id="docFechar">Fechar</button></div></div>
   <div class="doc-area"><article class="folha" id="folha" contenteditable="true" spellcheck="true" tabindex="-1"></article></div>
 </div>
