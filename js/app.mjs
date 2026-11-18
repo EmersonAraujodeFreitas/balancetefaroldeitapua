@@ -1354,7 +1354,7 @@ function fichaContrato(c) {
     g += `<line x1="${cx - bw / 2 + 4}" x2="${cx + bw / 2 - 4}" y1="${y(l.dev)}" y2="${y(l.dev)}" stroke="#054166" stroke-width="2.5" stroke-dasharray="5 4"/>`;
     g += `<text x="${cx}" y="${H - 10}" text-anchor="middle" class="eixo-x">${rotuloMes(l.mes).replace("/20", "/")}</text>`;
   });
-  const nfs = (arr) => arr.map((d) => `<span class="nf-tag" title="${esc(d.desc)}">NF ${esc(d.nf || "s/n")} · ${brl(d.v)} · baixa ${esc(d.baixa)}</span>`).join("");
+  const nfs = (arr) => arr.map((d) => `<span class="nf-tag" title="${esc(d.desc)}">${/^\d/.test(d.nf || "") ? "NF " + esc(d.nf) : esc(d.nf || "s/n")} · ${brl(d.v)} · ${esc(String(d.baixa).slice(0, 5))}</span>`).join("");
   return `<div class="card ficha-ct">
     <div class="cab"><div class="cab-secao"><span class="eyebrow">Ficha do contrato</span><h2>${esc(c.forn)}</h2></div><button type="button" class="link-x" data-ct-ficha="${c.id}" aria-label="Fechar">×</button></div>
     <dl class="ficha-dados">
@@ -1382,10 +1382,11 @@ function fichaContrato(c) {
     <div class="cab-secao" style="margin-top:16px"><span class="eyebrow">Por competência</span><h3>Pago x devido em cada mês de serviço</h3></div>
     <div class="legenda" style="margin:6px 0"><span><i style="background:#2a9d8f"></i>Conforme</span><span><i style="background:#e0a100"></i>Acima/abaixo do devido</span><span><i class="linha" style="background:#054166"></i>Devido</span></div>
     <div class="grafico-largo"><svg class="g" viewBox="0 0 ${W} ${H}" role="img" aria-label="Pago por competência e valor devido">${g}</svg></div>
-    <div class="tabela" style="margin-top:10px"><table><thead><tr><th>Mês</th><th class="n">Devido</th><th>Pagamentos com esta competência</th><th class="n">Pago</th><th class="n">Diferença</th><th class="n">Diferença acumulada</th><th>Pago no balancete do mês</th></tr></thead><tbody>
-      ${linhas.map((l) => { acum = r2(acum + l.difC); return `<tr class="${l.comp.length > 1 ? "linha-venc" : ""}"><td><b>${rotuloMes(l.mes)}</b></td><td class="n">${brl(l.dev)}</td><td>${l.comp.length ? nfs(l.comp) : l.mes === ultBal ? '<span class="mini">costuma ser paga no balancete seguinte</span>' : '<span class="sit pendente">sem pagamento</span>'}${l.comp.length > 1 ? '<br><span class="mini neg">competência paga mais de uma vez</span>' : ""}</td>
-        <td class="n">${brl(l.pc)}</td><td class="n ${l.difC > 0.01 ? "neg" : l.difC < -0.01 ? "pos" : ""}">${l.difC > 0 ? "+" : ""}${brl(l.difC)}</td><td class="n ${acum > 0.01 ? "neg" : ""}">${acum > 0 ? "+" : ""}${brl(acum)}</td><td class="mini">${l.pagos.length ? l.pagos.map((d) => `NF ${esc(d.nf || "s/n")} (comp. ${esc(d.ref || "?")})`).join(", ") : "—"}</td></tr>`; }).join("")}
-      <tr class="total"><td>Total</td><td class="n">${brl(an.totDev)}</td><td></td><td class="n">${brl(linhas.reduce((s2, l) => s2 + l.pc, 0))}</td><td class="n">${brl(linhas.reduce((s2, l) => s2 + l.difC, 0))}</td><td></td><td></td></tr>
+    <div class="tabela ficha-tab"><table><thead><tr><th>Mês</th><th class="n">Devido</th><th>Notas desta competência (valor · baixa)</th><th class="n">Pago</th><th class="n">Dif.</th><th class="n">Acum.</th></tr></thead><tbody>
+      ${linhas.map((l) => { acum = r2(acum + l.difC); return `<tr class="${l.comp.length > 1 ? "linha-venc" : ""}"><td title="${esc(l.pagos.length ? "Pago no balancete deste mês: " + l.pagos.map((d) => `NF ${d.nf || "s/n"} (comp. ${d.ref || "?"})`).join(", ") : "Nada pago no balancete deste mês")}"><b>${rotuloMes(l.mes).replace("/20", "/")}</b></td><td class="n">${brl(l.dev)}</td>
+        <td>${l.comp.length ? nfs(l.comp) : l.mes === ultBal ? '<span class="mini">paga no balancete seguinte</span>' : '<span class="sit pendente">sem pagamento</span>'}${l.comp.length > 1 ? ' <span class="mini neg">paga mais de uma vez</span>' : ""}</td>
+        <td class="n">${brl(l.pc)}</td><td class="n ${l.difC > 0.01 ? "neg" : l.difC < -0.01 ? "pos" : ""}">${l.difC > 0 ? "+" : ""}${brl(l.difC)}</td><td class="n ${acum > 0.01 ? "neg" : ""}">${acum > 0 ? "+" : ""}${brl(acum)}</td></tr>`; }).join("")}
+      <tr class="total"><td>Total</td><td class="n">${brl(an.totDev)}</td><td></td><td class="n">${brl(linhas.reduce((s2, l) => s2 + l.pc, 0))}</td><td class="n">${brl(linhas.reduce((s2, l) => s2 + l.difC, 0))}</td><td></td></tr>
     </tbody></table></div>
     ${foraL.length ? `<div class="cab-secao" style="margin-top:16px"><span class="eyebrow">Fora da mensalidade</span><h3>Outros pagamentos ao fornecedor</h3></div>
     <div class="tabela"><table><thead><tr><th>Balancete</th><th>Histórico</th><th>NF</th><th>Baixa</th><th class="n">Valor</th></tr></thead><tbody>
