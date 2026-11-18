@@ -2,6 +2,7 @@ import { lerBalancete, conferir } from "./parser.mjs";
 import { renderExecutivo } from "./executivo.mjs";
 import { renderMes, renderProjecao, renderFornecedor, mapaCalor, SITUACOES, chaveAlerta, chaveAntiga } from "./gestao.mjs";
 import { comboMensal, saude, treemapCategorias, listaTendencia, multiplos } from "./graficos.mjs";
+import { textoDoPdf, lerContrato, fimVigente } from "./contratos.mjs";
 import { AC, PERFIS, podeEditar, ehAdmin, normUsuario, validarSenha, mensagemErro, carregarFirebase, existeAdministrador, entrar, sair, aoMudarSessao,
   lerPerfil, registrarAcesso, trocarSenha, criarPrimeiroAdmin, criarAcesso, novaSenhaProvisoria, atualizarAcesso, listarAcessos,
   lerDados, gravarMeses, gravarAnalise, gravarAcomp, ouvirAcomp, gravarOrcamento, nomeUsuario, gravarContratos, gravarFundo, registrar, lerRegistros, REGRAS } from "./acesso.mjs";
@@ -1196,14 +1197,28 @@ function prepararAta() {
 
 // ---------------------------------------------------------------- contratos
 // filtro opcional: só os lançamentos cujo histórico contém o texto (ex.: "ASSESSORIA"), para não misturar reembolsos
-const normTxt = (t) => String(t || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
-function pagoNoMes(forn, mes, filtro) { const b = S.todos.find((x) => x.mes === mes), f = normTxt(filtro).trim(); return b ? b.despesas.filter((d) => d.forn === forn && (!f || normTxt(d.desc).includes(f))).reduce((s2, d) => s2 + d.v, 0) : 0; }
+const normTxt = (t) => String(t || "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
+const lancDoContrato = (c, b, dentro = true) => b.despesas.filter((d) => d.forn === c.forn && (!c.filtro || normTxt(d.desc).includes(normTxt(c.filtro).trim())) === dentro);
+function pagoNoMes(forn, mes, filtro) { const b = S.todos.find((x) => x.mes === mes); return b ? lancDoContrato({ forn, filtro }, b).reduce((s2, d) => s2 + d.v, 0) : 0; }
+const ctIniMes = (c) => (c.inicio || "").slice(0, 7);
+const diasMes = (mes) => new Date(+mes.slice(0, 4), +mes.slice(5, 7), 0).getDate();
+// valor devido no mês, proporcional quando o contrato começa ou termina no meio do mês
+function devidoNoMes(c, mes) {
+  let fr = 1; const dm = diasMes(mes);
+  if (c.inicio && c.inicio.length === 10 && c.inicio.slice(0, 7) === mes) fr -= (+c.inicio.slice(8) - 1) / dm;
+  const fim = fimContrato(c);
+  if (fim && fim.slice(0, 7) === mes) fr -= (dm - +fim.slice(8)) / dm;
+  return r2(c.valor * Math.max(0, fr));
+}
+function fimContrato(c) { if (c.prazoMeses && c.inicio && c.inicio.length === 10) { const v = fimVigente(c.inicio, c.prazoMeses, c.renovacaoAuto, hojeISO()); if (v) return v.fim; } return c.fim || ""; }
+const refIso = (ref) => { const m = /^(\d{2})\/(\d{4})$/.exec(String(ref || "").trim()); return m ? `${m[2]}-${m[1]}` : ""; };
 function analisarContrato(c) {
-  const hoje = hojeISO(), tol = (c.tol ?? 2) / 100;
-  const ms = S.todos.filter((b) => (!c.inicio || b.mes >= c.inicio) && (!c.fim || b.mes <= c.fim.slice(0, 7)));
-  const meses = ms.map((b) => { const p = r2(pagoNoMes(c.forn, b.mes, c.filtro)); const st = !p ? "ausente" : Math.abs(p - c.valor) <= c.valor * tol ? "ok" : "dif"; return { mes: b.mes, p, st }; });
-  const ult = meses.at(-1), venceEm = c.fim ? diasEntre(hoje, c.fim) : null;
-  return { meses, ult, venceEm, divs: meses.filter((m) => m.st !== "ok").length };
+  const hoje = hojeISO(), tol = (c.tol ?? 2) / 100, fim = fimContrato(c);
+  const ms = S.todos.filter((b) => (!c.inicio || b.mes >= ctIniMes(c)) && (!fim || b.mes <= fim.slice(0, 7)));
+  const meses = ms.map((b) => { const dev = devidoNoMes(c, b.mes), p = r2(pagoNoMes(c.forn, b.mes, c.filtro)); const st = !p ? "ausente" : Math.abs(p - dev) <= dev * tol ? "ok" : "dif"; return { mes: b.mes, p, dev, st }; });
+  const ult = meses.at(-1), venceEm = fim ? diasEntre(hoje, fim) : null;
+  const totDev = meses.reduce((s2, m) => s2 + m.dev, 0), totPago = meses.reduce((s2, m) => s2 + m.p, 0);
+  return { meses, ult, venceEm, fim, divs: meses.filter((m) => m.st !== "ok").length, totDev: r2(totDev), totPago: r2(totPago), dif: r2(totPago - totDev) };
 }
 function sugestoesContrato() {
   const base = S.todos.slice(-12), ja = new Set((S.contratos || []).map((c) => c.forn));
@@ -1217,45 +1232,180 @@ function sugestoesContrato() {
 function contratosTab() {
   const el = $("#secContratos"); if (!el) return;
   const adm = ehAdmin(), lista = S.contratos || [], an = lista.map((c) => ({ c, ...analisarContrato(c) }));
-  const ultMes = S.todos.at(-1)?.mes, divUlt = an.filter((x) => x.ult && x.ult.mes === ultMes && x.ult.st !== "ok"), venc = an.filter((x) => x.venceEm !== null && x.venceEm <= 60);
-  const stTxt = (m, c) => !m ? "—" : m.st === "ok" ? `<span class="sit resolvido">Conforme</span>` : m.st === "ausente" ? `<span class="sit pendente">Sem pagamento</span>` : `<span class="sit questionado">${m.p > c.valor ? "+" : ""}${brl(m.p - c.valor)}</span>`;
+  const ultMes = S.todos.at(-1)?.mes, divUlt = an.filter((x) => x.ult && x.ult.mes === ultMes && x.ult.st !== "ok");
+  const venc = an.filter((x) => x.venceEm !== null && x.venceEm <= 60), excesso = an.reduce((s2, x) => s2 + Math.max(0, x.dif), 0);
+  const stTxt = (m) => !m ? "—" : m.st === "ok" ? `<span class="sit resolvido">Conforme</span>` : m.st === "ausente" ? `<span class="sit pendente">Sem pagamento</span>` : `<span class="sit questionado">${m.p > m.dev ? "+" : ""}${brl(m.p - m.dev)}</span>`;
   const sug = adm ? sugestoesContrato() : [];
   el.innerHTML = `
   <div class="kpis-sec">
     <div class="kpi"><span class="eyebrow">Contratos cadastrados</span><b>${lista.length}</b><span class="det">${brl(lista.reduce((s2, c) => s2 + (c.valor || 0), 0))} por mês</span></div>
+    <div class="kpi ${excesso > 0 ? "neg" : "pos"}"><span class="eyebrow">Pago acima do contratado</span><b>${brl(excesso)}</b><span class="det">soma de todos os contratos, desde o início</span></div>
     <div class="kpi ${divUlt.length ? "neg" : "pos"}"><span class="eyebrow">Diferenças em ${ultMes ? rotuloMes(ultMes) : "—"}</span><b>${divUlt.length}</b><span class="det">pagamento diferente do contratado ou ausente</span></div>
     <div class="kpi ${venc.length ? "neg" : ""}"><span class="eyebrow">Vencendo em 60 dias</span><b>${venc.length}</b><span class="det">avaliar renovação ou cotação</span></div>
   </div>
-  ${lista.length ? `<div class="tabela"><table id="tabContratos"><thead><tr><th>Fornecedor</th><th>Objeto</th><th class="n">Valor contratado</th><th>Último mês</th><th class="n">Pago</th><th>Situação</th><th class="n">Meses com diferença</th><th>Vigência</th>${adm ? "<th></th>" : ""}</tr></thead><tbody>
-    ${an.map(({ c, meses, ult, venceEm, divs }) => `<tr><td><b style="font-weight:600">${esc(c.forn)}</b>${c.link ? `<br><a class="mini" href="${esc(c.link)}" target="_blank" rel="noopener noreferrer">📎 contrato</a>` : ""}</td><td>${esc(c.objeto || "")}${c.filtro ? `<br><span class="mini">conta só lançamentos com "${esc(c.filtro)}"</span>` : ""}</td><td class="n">${brl(c.valor)}</td><td>${ult ? rotuloMes(ult.mes) : "—"}</td><td class="n">${ult ? brl(ult.p) : "—"}</td><td>${stTxt(ult, c)}</td>
-      <td class="n"><span class="chips">${meses.map((m) => `<i class="chip ${m.st}" data-tip="${esc(`${rotuloMes(m.mes)}\nPago: ${brl(m.p)}\nContratado: ${brl(c.valor)}`)}"></i>`).join("")}</span><span class="mini">${divs} de ${meses.length}</span></td>
-      <td>${c.inicio ? rotuloMes(c.inicio) : "—"} a ${c.fim ? dataBR(c.fim) : "indeterminado"}${venceEm !== null ? `<br><span class="mini ${venceEm <= 60 ? "neg" : ""}">${venceEm < 0 ? `vencido há ${-venceEm} dia(s)` : `vence em ${venceEm} dia(s)`}</span>` : ""}${c.reajuste ? `<br><span class="mini">reajuste: ${esc(c.reajuste)}</span>` : ""}</td>
-      ${adm ? `<td><div class="acoes-lin"><button type="button" data-ct-edit="${c.id}">Editar</button><button type="button" class="perigo" data-ct-del="${c.id}">Excluir</button></div></td>` : ""}</tr>`).join("")}
+  ${adm ? `<div class="card importa-ct"><div class="cab"><div class="cab-secao"><span class="eyebrow">Importar</span><h2>Ler contrato em PDF</h2></div>
+      <label class="btn"><input type="file" id="ctArquivo" accept="application/pdf" hidden>Escolher PDF do contrato</label></div>
+    <p class="small muted" style="margin:6px 0 0">O site lê o contrato e preenche fornecedor, número, CNPJ, objeto, valor mensal, início, prazo, renovação, aviso prévio, vencimento, reajuste e valores avulsos. Contratos digitalizados (foto ou escaneados) passam por reconhecimento de texto, que leva cerca de 1 minuto. O arquivo não é enviado nem guardado: só os campos que você confirmar.</p>
+    <div id="ctProgresso" class="small" hidden></div><div id="ctRevisao"></div></div>` : ""}
+  ${lista.length ? `<div class="tabela"><table id="tabContratos"><thead><tr><th>Fornecedor</th><th>Objeto</th><th class="n">Valor/mês</th><th>Último mês</th><th>Situação</th><th class="n">Contratado</th><th class="n">Pago</th><th class="n">Diferença</th><th class="n">Meses</th><th>Vigência</th><th></th></tr></thead><tbody>
+    ${an.map(({ c, meses, ult, venceEm, fim, divs, totDev, totPago, dif }) => `<tr class="${S.ctFicha === c.id ? "ativo" : ""}"><td><b style="font-weight:600">${esc(c.forn)}</b>${c.numero ? `<br><span class="mini">contrato ${esc(c.numero)}</span>` : ""}${c.link ? `<br><a class="mini" href="${esc(c.link)}" target="_blank" rel="noopener noreferrer">📎 contrato</a>` : ""}</td>
+      <td>${esc(c.objeto || "")}${c.filtro ? `<br><span class="mini">conta só lançamentos com "${esc(c.filtro)}"</span>` : ""}</td><td class="n">${brl(c.valor)}</td><td>${ult ? rotuloMes(ult.mes) : "—"}</td><td>${stTxt(ult)}</td>
+      <td class="n">${brl(totDev)}</td><td class="n">${brl(totPago)}</td><td class="n ${dif > 0.01 ? "neg" : dif < -0.01 ? "pos" : ""}">${dif > 0 ? "+" : ""}${brl(dif)}</td>
+      <td class="n"><span class="chips">${meses.map((m) => `<i class="chip ${m.st}" data-tip="${esc(`${rotuloMes(m.mes)}\nPago: ${brl(m.p)}\nDevido: ${brl(m.dev)}`)}"></i>`).join("")}</span><span class="mini">${divs} de ${meses.length} com diferença</span></td>
+      <td>${c.inicio ? (c.inicio.length === 10 ? dataBR(c.inicio) : rotuloMes(c.inicio)) : "—"} a ${fim ? dataBR(fim) : "indeterminado"}${venceEm !== null ? `<br><span class="mini ${venceEm <= 60 ? "neg" : ""}">${venceEm < 0 ? `vencido há ${-venceEm} dia(s)` : `vence em ${venceEm} dia(s)`}</span>` : ""}</td>
+      <td><div class="acoes-lin"><button type="button" data-ct-ficha="${c.id}">${S.ctFicha === c.id ? "Fechar" : "Detalhar"}</button>${adm ? `<button type="button" data-ct-edit="${c.id}">Editar</button><button type="button" class="perigo" data-ct-del="${c.id}">Excluir</button>` : ""}</div></td></tr>`).join("")}
   </tbody></table></div>
-  <p class="mini">Cada quadradinho é um mês: verde conforme, amarelo valor diferente (tolerância de ${"2"}% ou a definida no contrato), vermelho sem pagamento.</p>` : `<div class="vazio card">Nenhum contrato cadastrado.${adm ? " Use o formulário abaixo ou as sugestões." : ""}</div>`}
-  ${adm ? `<form class="card" id="fContrato" data-id="${S.ctEditando || ""}">${formContrato(lista.find((c) => c.id === S.ctEditando))}</form>
+  <p class="mini">Cada quadradinho é um mês, pela data do pagamento: verde conforme, amarelo valor diferente do devido (tolerância de 2% ou a definida no contrato), vermelho sem pagamento. O primeiro e o último mês são proporcionais aos dias de vigência.</p>` : `<div class="vazio card">Nenhum contrato cadastrado.${adm ? " Importe o PDF do contrato, use o formulário abaixo ou as sugestões." : ""}</div>`}
+  <div id="ctFicha">${S.ctFicha && lista.find((c) => c.id === S.ctFicha) ? fichaContrato(lista.find((c) => c.id === S.ctFicha)) : ""}</div>
+  ${adm ? `<form class="card" id="fContrato" data-id="${S.ctEditando || ""}">${formContrato(lista.find((c) => c.id === S.ctEditando) || S.ctRascunho)}</form>
   ${sug.length ? `<div class="card"><div class="cab-secao"><span class="eyebrow">Sugestões</span><h2>Pagamentos que parecem contratos fixos</h2></div>
     <p class="small muted" style="margin:6px 0 10px">Fornecedores pagos quase todo mês com valor estável nos últimos 12 meses. Confira o valor no contrato antes de adicionar.</p>
     <div class="tabela"><table><thead><tr><th>Fornecedor</th><th>Categoria</th><th class="n">Valor típico</th><th class="n">Meses pagos</th><th></th></tr></thead><tbody>
     ${sug.map((x) => `<tr><td>${esc(x.forn)}</td><td>${esc(x.cat || "")}</td><td class="n">${brl(x.valor)}</td><td class="n">${x.meses}</td><td><div class="acoes-lin"><button type="button" data-ct-sug="${esc(x.forn)}" data-v="${x.valor}">Usar no cadastro</button></div></td></tr>`).join("")}
     </tbody></table></div></div>` : ""}` : ""}`;
 }
+// ficha do contrato: mês a mês, pela data de pagamento e pela competência informada na nota
+function fichaContrato(c) {
+  const an = analisarContrato(c), fim = an.fim;
+  const todosL = S.todos.flatMap((b) => lancDoContrato(c, b).map((d) => ({ ...d, mesBal: b.mes })));
+  const foraL = S.todos.flatMap((b) => lancDoContrato(c, b, false).map((d) => ({ ...d, mesBal: b.mes })));
+  const porComp = {}; for (const d of todosL) { const k = refIso(d.ref) || d.mesBal; (porComp[k] ||= []).push(d); }
+  const linhas = an.meses.map((m) => {
+    const pagos = todosL.filter((d) => d.mesBal === m.mes), comp = porComp[m.mes] || [], pc = r2(comp.reduce((s2, d) => s2 + d.v, 0));
+    return { ...m, pagos, comp, pc, difC: r2(pc - m.dev) };
+  });
+  let acum = 0;
+  const repetidas = Object.entries(porComp).filter(([, v]) => v.length > 1);
+  // a competência do último balancete costuma ser paga no mês seguinte: não conta como falta
+  const ultBal = S.todos.at(-1)?.mes;
+  const semComp = linhas.filter((l) => !l.comp.length && l.mes !== ultBal).map((l) => l.mes);
+  const acima = linhas.filter((l) => l.pc > l.dev * (1 + (c.tol ?? 2) / 100));
+  const avisoData = fim && c.avisoDias ? somaDias(fim, -c.avisoDias) : "";
+  const perguntas = [];
+  if (acima.length) perguntas.push(`Nas competências ${acima.map((l) => rotuloMes(l.mes)).join(", ")} foram pagos valores acima dos ${brl(c.valor)} mensais previstos no contrato${c.numero ? ` nº ${c.numero}` : ""} (${brl(acima.reduce((s2, l) => s2 + l.difC, 0))} acima nesses meses; no período todo, ${brl(an.totPago)} pagos contra ${brl(an.totDev)} devidos). Pedimos as notas fiscais com a composição de cada valor e o fundamento contratual.`);
+  if (repetidas.length) perguntas.push(`As competências ${repetidas.map(([k]) => rotuloMes(k)).join(", ")} aparecem em mais de um pagamento (${repetidas.map(([k, v]) => `${rotuloMes(k)}: NF ${v.map((d) => d.nf).join(" e ")}`).join("; ")}). Pedimos esclarecer se houve pagamento em duplicidade ou competência informada errada.`);
+  if (semComp.length) perguntas.push(`Não há pagamento identificado para as competências ${semComp.map(rotuloMes).join(", ")}. Pedimos confirmar se estão quitadas e em qual nota.`);
+  if (foraL.length) perguntas.push(`Além da mensalidade, foram pagos ${brl(foraL.reduce((s2, d) => s2 + d.v, 0))} ao fornecedor em outros lançamentos (${[...new Set(foraL.map((d) => d.item || d.desc.split(" - ")[0]))].slice(0, 4).join(", ")}). Pedimos os comprovantes que justificam cada reembolso.`);
+  S.ctPerguntas = perguntas;
+  // gráfico: pago por competência x devido
+  const W = 1040, H = 260, ml = 92, mr = 16, mt = 18, mb = 32, mx = Math.max(...linhas.map((l) => Math.max(l.pc, l.dev)), 1) * 1.15;
+  const y = (v) => mt + (H - mt - mb) * (1 - v / mx), bw = (W - ml - mr) / Math.max(1, linhas.length), w = Math.min(40, bw * 0.55);
+  let g = [0, 0.5, 1].map((f) => `<line x1="${ml}" x2="${W - mr}" y1="${y(mx * f)}" y2="${y(mx * f)}" stroke="#e3e9ef"/><text x="${ml - 8}" y="${y(mx * f) + 4}" text-anchor="end">${brl(mx * f).replace(",00", "")}</text>`).join("");
+  linhas.forEach((l, i) => {
+    const cx = ml + i * bw + bw / 2, cor = !l.pc ? "#d9663a" : l.difC > l.dev * 0.02 ? "#e0a100" : "#2a9d8f";
+    if (l.pc) g += `<rect x="${cx - w / 2}" y="${y(l.pc)}" width="${w}" height="${y(0) - y(l.pc)}" rx="4" fill="${cor}" data-tip="${esc(`Competência ${rotuloMes(l.mes)}\nPago: ${brl(l.pc)}\nDevido: ${brl(l.dev)}\nNF: ${l.comp.map((d) => d.nf).join(", ")}`)}"/>`;
+    else g += `<text x="${cx}" y="${y(0) - 6}" text-anchor="middle" style="fill:#b4231a;font-weight:700">0</text>`;
+    g += `<line x1="${cx - bw / 2 + 4}" x2="${cx + bw / 2 - 4}" y1="${y(l.dev)}" y2="${y(l.dev)}" stroke="#054166" stroke-width="2.5" stroke-dasharray="5 4"/>`;
+    g += `<text x="${cx}" y="${H - 10}" text-anchor="middle" class="eixo-x">${rotuloMes(l.mes).replace("/20", "/")}</text>`;
+  });
+  const nfs = (arr) => arr.map((d) => `<span class="nf-tag" title="${esc(d.desc)}">NF ${esc(d.nf || "s/n")} · ${brl(d.v)} · baixa ${esc(d.baixa)}</span>`).join("");
+  return `<div class="card ficha-ct">
+    <div class="cab"><div class="cab-secao"><span class="eyebrow">Ficha do contrato</span><h2>${esc(c.forn)}</h2></div><button type="button" class="link-x" data-ct-ficha="${c.id}" aria-label="Fechar">×</button></div>
+    <dl class="ficha-dados">
+      ${c.numero ? `<div><dt>Contrato</dt><dd>nº ${esc(c.numero)}</dd></div>` : ""}${c.cnpj ? `<div><dt>CNPJ</dt><dd>${esc(c.cnpj)}</dd></div>` : ""}
+      <div><dt>Objeto</dt><dd>${esc(c.objeto || "—")}</dd></div>
+      <div><dt>Valor mensal</dt><dd>${brl(c.valor)}${c.diaVenc ? ` · vence dia ${c.diaVenc}` : ""}</dd></div>
+      <div><dt>Vigência</dt><dd>${c.inicio ? (c.inicio.length === 10 ? dataBR(c.inicio) : rotuloMes(c.inicio)) : "—"} a ${fim ? dataBR(fim) : "indeterminado"}${c.prazoMeses ? ` · períodos de ${c.prazoMeses} meses` : ""}${c.renovacaoAuto ? " · renovação automática" : ""}</dd></div>
+      ${avisoData ? `<div><dt>Aviso para não renovar</dt><dd>até ${dataBR(avisoData)} (${c.avisoDias} dias antes)</dd></div>` : ""}
+      ${c.reajuste ? `<div><dt>Reajuste</dt><dd>${esc(c.reajuste)}</dd></div>` : ""}
+      ${(c.adicionais || []).length ? `<div><dt>Valores avulsos previstos</dt><dd>${c.adicionais.map((x) => `${brl(x.valor)} ${esc(x.desc)}`).join(" · ")}</dd></div>` : ""}
+      ${c.multa ? `<div><dt>Multa por atraso</dt><dd>${esc(c.multa)}</dd></div>` : ""}
+    </dl>
+    <div class="kpis-sec" style="margin-top:14px">
+      <div class="kpi"><span class="eyebrow">Devido pelo contrato</span><b>${brl(an.totDev)}</b><span class="det">${an.meses.length} mês(es), com proporcional</span></div>
+      <div class="kpi ${an.dif > 0.01 ? "neg" : "pos"}"><span class="eyebrow">Pago (mensalidade)</span><b>${brl(an.totPago)}</b><span class="det">${an.dif > 0.01 ? `${brl(an.dif)} acima` : an.dif < -0.01 ? `${brl(-an.dif)} abaixo` : "igual ao devido"}</span></div>
+      <div class="kpi"><span class="eyebrow">Outros pagamentos ao fornecedor</span><b>${brl(foraL.reduce((s2, d) => s2 + d.v, 0))}</b><span class="det">${foraL.length} lançamento(s) fora da mensalidade</span></div>
+      <div class="kpi"><span class="eyebrow">Total pago ao fornecedor</span><b>${brl(an.totPago + foraL.reduce((s2, d) => s2 + d.v, 0))}</b><span class="det">no período dos balancetes</span></div>
+    </div>
+    <div class="cab-secao" style="margin-top:16px"><span class="eyebrow">Por competência</span><h3>Pago x devido em cada mês de serviço</h3></div>
+    <div class="legenda" style="margin:6px 0"><span><i style="background:#2a9d8f"></i>Conforme</span><span><i style="background:#e0a100"></i>Acima/abaixo do devido</span><span><i class="linha" style="background:#054166"></i>Devido</span></div>
+    <div class="grafico-largo"><svg class="g" viewBox="0 0 ${W} ${H}" role="img" aria-label="Pago por competência e valor devido">${g}</svg></div>
+    <div class="tabela" style="margin-top:10px"><table><thead><tr><th>Mês</th><th class="n">Devido</th><th>Pagamentos com esta competência</th><th class="n">Pago</th><th class="n">Diferença</th><th class="n">Diferença acumulada</th><th>Pago no balancete do mês</th></tr></thead><tbody>
+      ${linhas.map((l) => { acum = r2(acum + l.difC); return `<tr class="${l.comp.length > 1 ? "linha-venc" : ""}"><td><b>${rotuloMes(l.mes)}</b></td><td class="n">${brl(l.dev)}</td><td>${l.comp.length ? nfs(l.comp) : l.mes === ultBal ? '<span class="mini">costuma ser paga no balancete seguinte</span>' : '<span class="sit pendente">sem pagamento</span>'}${l.comp.length > 1 ? '<br><span class="mini neg">competência paga mais de uma vez</span>' : ""}</td>
+        <td class="n">${brl(l.pc)}</td><td class="n ${l.difC > 0.01 ? "neg" : l.difC < -0.01 ? "pos" : ""}">${l.difC > 0 ? "+" : ""}${brl(l.difC)}</td><td class="n ${acum > 0.01 ? "neg" : ""}">${acum > 0 ? "+" : ""}${brl(acum)}</td><td class="mini">${l.pagos.length ? l.pagos.map((d) => `NF ${esc(d.nf || "s/n")} (comp. ${esc(d.ref || "?")})`).join(", ") : "—"}</td></tr>`; }).join("")}
+      <tr class="total"><td>Total</td><td class="n">${brl(an.totDev)}</td><td></td><td class="n">${brl(linhas.reduce((s2, l) => s2 + l.pc, 0))}</td><td class="n">${brl(linhas.reduce((s2, l) => s2 + l.difC, 0))}</td><td></td><td></td></tr>
+    </tbody></table></div>
+    ${foraL.length ? `<div class="cab-secao" style="margin-top:16px"><span class="eyebrow">Fora da mensalidade</span><h3>Outros pagamentos ao fornecedor</h3></div>
+    <div class="tabela"><table><thead><tr><th>Balancete</th><th>Histórico</th><th>NF</th><th>Baixa</th><th class="n">Valor</th></tr></thead><tbody>
+      ${foraL.map((d) => `<tr><td>${rotuloMes(d.mesBal)}</td><td>${esc(d.desc)}</td><td>${esc(d.nf || "")}</td><td>${esc(d.baixa)}</td><td class="n">${brl(d.v)}</td></tr>`).join("")}</tbody></table></div>` : ""}
+    <div class="cab-secao" style="margin-top:16px"><span class="eyebrow">Para questionar</span><h3>Pontos encontrados</h3></div>
+    ${perguntas.length ? `<ol class="perguntas-ct">${perguntas.map((q) => `<li>${esc(q)}</li>`).join("")}</ol>
+      <div class="acoes"><button class="btn sec" type="button" id="ctCopiarPerg">Copiar perguntas</button>${avisoData && pode() ? `<button class="btn sec" type="button" data-ct-agenda="${c.id}">Pôr o prazo de aviso na agenda</button>` : ""}</div>`
+      : `<p class="muted">Pagamentos conferem com o contrato.</p>${avisoData && pode() ? `<div class="acoes"><button class="btn sec" type="button" data-ct-agenda="${c.id}">Pôr o prazo de aviso na agenda</button></div>` : ""}`}
+  </div>`;
+}
 function formContrato(c) {
   const forns = porFornecedor(S.todos).map((f) => f.forn);
-  return `<div class="cab-secao"><span class="eyebrow">${c ? "Editar" : "Novo"} contrato</span><h2>${c ? esc(c.forn) : "Cadastrar contrato"}</h2></div>
+  const ad = (c?.adicionais || []).map((x) => `${fmtValor(x.valor)} ${x.desc}`).join("; ");
+  return `<div class="cab-secao"><span class="eyebrow">${c && c.id ? "Editar" : "Novo"} contrato</span><h2>${c && c.id ? esc(c.forn) : c && c.forn ? "Conferir dados lidos do PDF" : "Cadastrar contrato"}</h2></div>
+    ${c && c.origem ? `<p class="small muted">Lido de "${esc(c.origem)}". Confira cada campo antes de salvar.</p>` : ""}
     <div class="form" style="margin-top:12px">
       <label>Fornecedor (como aparece nos balancetes)<input id="ctForn" list="listaForn" required value="${esc(c?.forn || "")}"></label>
+      <label>Nº do contrato<input id="ctNum" value="${esc(c?.numero || "")}"></label>
+      <label>CNPJ<input id="ctCnpj" value="${esc(c?.cnpj || "")}"></label>
       <label>Objeto<input id="ctObj" value="${esc(c?.objeto || "")}" placeholder="ex.: portaria 24h"></label>
       <label>Valor mensal contratado (R$)<input id="ctValor" inputmode="decimal" required value="${fmtValor(c?.valor || 0)}"></label>
-      <label>Início<input id="ctIni" type="month" value="${c?.inicio || ""}"></label>
-      <label>Fim<input id="ctFim" type="date" value="${c?.fim || ""}"></label>
+      <label>Vencimento (dia do mês)<input id="ctDia" inputmode="numeric" value="${c?.diaVenc || ""}"></label>
+      <label>Início<input id="ctIni" type="date" value="${c?.inicio && c.inicio.length === 10 ? c.inicio : c?.inicio ? c.inicio + "-01" : ""}"></label>
+      <label>Prazo (meses)<input id="ctPrazo" inputmode="numeric" value="${c?.prazoMeses || ""}" placeholder="ex.: 12"></label>
+      <label class="check"><input type="checkbox" id="ctRenova" ${c?.renovacaoAuto ? "checked" : ""}> Renova automaticamente</label>
+      <label>Fim (se não houver prazo)<input id="ctFim" type="date" value="${c?.fim || ""}"></label>
+      <label>Aviso prévio para não renovar (dias)<input id="ctAviso" inputmode="numeric" value="${c?.avisoDias || ""}"></label>
       <label>Reajuste<input id="ctReaj" value="${esc(c?.reajuste || "")}" placeholder="ex.: IPCA em janeiro"></label>
+      <label>Multa por atraso<input id="ctMulta" value="${esc(c?.multa || "")}" placeholder="ex.: 2%"></label>
+      <label>Valores avulsos previstos<input id="ctAdic" value="${esc(ad)}" placeholder="ex.: 50,00 por certidão; 100,00 por audiência"></label>
       <label>Tolerância (%)<input id="ctTol" inputmode="decimal" value="${String(c?.tol ?? 2).replace(".", ",")}"></label>
       <label>Contar só lançamentos com o texto<input id="ctFiltro" value="${esc(c?.filtro || "")}" placeholder="ex.: ASSESSORIA (opcional)"></label>
       <label>Link do contrato<input id="ctLink" type="url" value="${esc(c?.link || "")}" placeholder="https:// (Google Drive, opcional)"></label>
     </div>
     <datalist id="listaForn">${forns.map((f) => `<option value="${esc(f)}">`).join("")}</datalist>
-    <div class="acoes" style="margin-top:10px"><button class="btn" type="submit">${c ? "Salvar alterações" : "Cadastrar contrato"}</button>${c ? `<button class="btn sec" type="button" id="ctCancelar">Cancelar</button>` : ""}<span class="small muted" id="ctMsg"></span></div>`;
+    <div class="acoes" style="margin-top:10px"><button class="btn" type="submit">${c && c.id ? "Salvar alterações" : "Cadastrar contrato"}</button>${c ? `<button class="btn sec" type="button" id="ctCancelar">Cancelar</button>` : ""}<span class="small muted" id="ctMsg"></span></div>`;
+}
+// importação: lê o PDF, extrai os campos e mostra para revisão antes de preencher o formulário
+async function importarContrato(f) {
+  const pr = $("#ctProgresso"), rv = $("#ctRevisao"); pr.hidden = false; rv.innerHTML = "";
+  const msg = (t) => { pr.textContent = t; };
+  try {
+    const lib = await carregarPdfjs();
+    const { texto, ocr, paginas } = await textoDoPdf(lib, new Uint8Array(await f.arrayBuffer()), msg);
+    const r = lerContrato(texto, porFornecedor(S.todos).map((x) => x.forn)), C = r.campos;
+    if (!C.contratado && !C.valor) { msg(`Não consegui identificar os dados em "${f.name}" (${paginas} página(s)${ocr ? ", lida por reconhecimento de texto" : ""}). Preencha o formulário manualmente.`); return; }
+    msg(`"${f.name}" lido (${paginas} página(s)${ocr ? ", por reconhecimento de texto: confira com atenção" : ""}).`);
+    const fv = C.inicio && C.prazoMeses ? fimVigente(C.inicio, C.prazoMeses, C.renovacaoAuto, hojeISO()) : null;
+    S.ctLido = { ...C, forn: C.forn || C.contratado || "", tol: 2, origem: f.name, fim: C.fim || "", filtro: "" };
+    // sugere o filtro quando o fornecedor também recebe reembolsos (palavra principal do histórico das mensalidades)
+    if (S.ctLido.forn && C.valor) {
+      const ls2 = S.todos.flatMap((b) => b.despesas.filter((d) => d.forn === S.ctLido.forn));
+      const perto = ls2.filter((d) => Math.abs(d.v - C.valor) <= C.valor * 0.05), outros = ls2.filter((d) => !perto.includes(d));
+      const pal = perto[0] ? (perto[0].item || perto[0].desc.split(" - ")[0]).split(/\s+/)[0] : "";
+      if (pal && outros.some((d) => !normTxt(d.desc).includes(normTxt(pal)))) S.ctLido.filtro = pal;
+    }
+    const linha = (rot, v, tr) => `<tr><th>${rot}</th><td>${v || '<span class="muted">não encontrado</span>'}</td><td class="mini">${tr ? `“…${esc(tr)}…”` : ""}</td></tr>`;
+    rv.innerHTML = `<div class="tabela" style="margin-top:12px"><table class="revisao-ct"><tbody>
+      ${linha("Contratado", esc(C.contratado || ""), r.trechos.contratado)}
+      ${linha("Fornecedor nos balancetes", C.forn ? `<b>${esc(C.forn)}</b>` : '<span class="neg">nenhum fornecedor parecido nos balancetes</span>')}
+      ${linha("Nº do contrato", esc(C.numero || ""), r.trechos.numero)}${linha("CNPJ", esc(C.cnpj || ""))}
+      ${linha("Objeto", esc(C.objeto || ""), r.trechos.objeto)}
+      ${linha("Valor mensal", C.valor ? brl(C.valor) : "", r.trechos.valor)}
+      ${linha("Início", C.inicio ? dataBR(C.inicio) : "", r.trechos.inicio)}
+      ${linha("Prazo", C.prazoMeses ? `${C.prazoMeses} meses${C.renovacaoAuto ? ", renovação automática" : ""}${fv ? ` · período atual até ${dataBR(fv.fim)}${fv.renovacoes ? ` (${fv.renovacoes} renovação(ões))` : ""}` : ""}` : "", r.trechos.prazo)}
+      ${linha("Aviso prévio", C.avisoDias ? `${C.avisoDias} dias` : "", r.trechos.aviso)}
+      ${linha("Vencimento", C.diaVenc ? `dia ${C.diaVenc}` : "")}
+      ${linha("Reajuste", esc(C.reajuste || ""), r.trechos.reajuste)}
+      ${linha("Valores avulsos", (C.adicionais || []).map((x) => `${brl(x.valor)} ${esc(x.desc)}`).join(" · "))}
+      ${linha("Multa", esc(C.multa || ""))}
+      ${linha("Filtro sugerido", S.ctLido.filtro ? `lançamentos com "${esc(S.ctLido.filtro)}" (o fornecedor também recebe outros pagamentos)` : "")}
+    </tbody></table></div>
+    <div class="acoes" style="margin-top:10px"><button class="btn" type="button" id="ctUsarLido">Preencher o cadastro com estes dados</button></div>`;
+    registrar("Importou contrato", f.name);
+  } catch (e) { msg(`Não foi possível ler "${f.name}": ${e.message}`); }
+}
+function lerFormContrato() {
+  const adic = $("#ctAdic").value.split(";").map((x) => x.trim()).filter(Boolean).map((x) => { const m = /^([\d.,]+)\s*(.*)$/.exec(x); return m ? { valor: parseValor(m[1]), desc: m[2] } : { valor: 0, desc: x }; });
+  return { forn: $("#ctForn").value.trim(), numero: $("#ctNum").value.trim(), cnpj: $("#ctCnpj").value.trim(), objeto: $("#ctObj").value.trim(), valor: parseValor($("#ctValor").value),
+    diaVenc: +$("#ctDia").value || null, inicio: $("#ctIni").value, prazoMeses: +$("#ctPrazo").value || null, renovacaoAuto: $("#ctRenova").checked, fim: $("#ctFim").value,
+    avisoDias: +$("#ctAviso").value || null, reajuste: $("#ctReaj").value.trim(), multa: $("#ctMulta").value.trim(), adicionais: adic, tol: parseValor($("#ctTol").value) || 2,
+    filtro: $("#ctFiltro").value.trim(), link: urlValida($("#ctLink").value.trim()) ? $("#ctLink").value.trim() : "" };
 }
 
 // ---------------------------------------------------------------- proposta de orçamento
@@ -1532,6 +1682,7 @@ document.addEventListener("submit", async (e) => {
 $("#bannerNovoVer").addEventListener("click", () => { marcarVisto(); location.hash = "#resumo"; });
 $("#bannerNovoFechar").addEventListener("click", marcarVisto);
 $("#btnGerarAta").addEventListener("click", gerarAta);
+document.addEventListener("change", (e) => { if (e.target.id === "ctArquivo" && e.target.files.length) { importarContrato(e.target.files[0]); e.target.value = ""; } });
 for (const id of ["#btnBackup", "#btnBackup2"]) $(id)?.addEventListener("click", baixarBackup);
 $("#regPessoa").addEventListener("change", pintarRegistros);
 $("#regAtualizar").addEventListener("click", listarRegistros);
@@ -1566,8 +1717,17 @@ document.addEventListener("click", async (e) => {
     ls.set(LS_ACOMP, S.acomp); agendarSync(); registrar("Removeu compromisso", S.acomp[k].titulo); render(); return;
   }
   // contratos
-  const ce = t.closest("[data-ct-edit]"); if (ce) { S.ctEditando = ce.dataset.ctEdit; contratosTab(); $("#fContrato").scrollIntoView({ block: "center" }); return; }
-  if (t.closest("#ctCancelar")) { S.ctEditando = ""; contratosTab(); return; }
+  const ce = t.closest("[data-ct-edit]"); if (ce) { S.ctEditando = ce.dataset.ctEdit; S.ctRascunho = null; contratosTab(); $("#fContrato").scrollIntoView({ block: "center" }); return; }
+  if (t.closest("#ctCancelar")) { S.ctEditando = ""; S.ctRascunho = null; contratosTab(); return; }
+  const cf = t.closest("[data-ct-ficha]"); if (cf) { S.ctFicha = S.ctFicha === cf.dataset.ctFicha ? "" : cf.dataset.ctFicha; contratosTab(); if (S.ctFicha) $("#ctFicha").scrollIntoView({ block: "start" }); return; }
+  if (t.closest("#ctUsarLido")) { S.ctEditando = ""; S.ctRascunho = S.ctLido; const rev = $("#ctRevisao").innerHTML; contratosTab(); $("#fContrato").scrollIntoView({ block: "start" }); return; }
+  if (t.closest("#ctCopiarPerg")) { const txt = (S.ctPerguntas || []).map((q, i) => `${i + 1}. ${q}`).join("\n\n"); navigator.clipboard.writeText(txt).then(() => toast("Perguntas copiadas."), () => toast("Não foi possível copiar; selecione o texto.")); return; }
+  const cag = t.closest("[data-ct-agenda]");
+  if (cag && pode()) {
+    const c = S.contratos.find((x) => x.id === cag.dataset.ctAgenda), fim = fimContrato(c), data = somaDias(fim, -(c.avisoDias || 30)), id = "ag:" + novoId();
+    S.acomp[id] = { data, tipo: "prazo", titulo: `Último dia para avisar a não renovação: ${c.forn}`, obs: `contrato vence em ${dataBR(fim)}; aviso por escrito`, por: nomeUsuario(), ts: new Date().toISOString() };
+    ls.set(LS_ACOMP, S.acomp); agendarSync(); registrar("Adicionou compromisso", S.acomp[id].titulo); toast(`Prazo de ${dataBR(data)} adicionado à agenda.`); render(); return;
+  }
   const cs = t.closest("[data-ct-sug]"); if (cs) { S.ctEditando = ""; contratosTab(); $("#ctForn").value = cs.dataset.ctSug; $("#ctValor").value = fmtValor(+cs.dataset.v); $("#fContrato").scrollIntoView({ block: "center" }); $("#ctObj").focus(); return; }
   const cd = t.closest("[data-ct-del]");
   if (cd) {
@@ -1598,12 +1758,12 @@ document.addEventListener("submit", async (e) => {
   }
   if (f.id === "fContrato") {
     e.preventDefault(); if (!ehAdmin()) return;
-    const valor = parseValor($("#ctValor").value), forn = $("#ctForn").value.trim();
-    if (!forn || !valor) return ($("#ctMsg").textContent = "Informe o fornecedor e o valor mensal.");
+    const dados = lerFormContrato();
+    if (!dados.forn || !dados.valor) return ($("#ctMsg").textContent = "Informe o fornecedor e o valor mensal.");
     const id = f.dataset.id || novoId();
-    const c = { id, forn, objeto: $("#ctObj").value.trim(), valor, inicio: $("#ctIni").value, fim: $("#ctFim").value, reajuste: $("#ctReaj").value.trim(), tol: parseValor($("#ctTol").value) || 2, filtro: $("#ctFiltro").value.trim(), link: urlValida($("#ctLink").value.trim()) ? $("#ctLink").value.trim() : "", por: nomeUsuario(), ts: new Date().toISOString() };
+    const c = { ...(S.contratos.find((x) => x.id === id) || {}), ...dados, id, origem: S.ctRascunho?.origem || S.contratos.find((x) => x.id === id)?.origem || "", por: nomeUsuario(), ts: new Date().toISOString() };
     const antes = S.contratos; S.contratos = [...S.contratos.filter((x) => x.id !== id), c].sort((a, b) => a.forn.localeCompare(b.forn, "pt-BR"));
-    try { await salvarConteudo("contratos"); registrar(f.dataset.id ? "Alterou contrato" : "Cadastrou contrato", `${forn} · ${brl(valor)}`); S.ctEditando = ""; toast("Contrato salvo."); render(); }
+    try { await salvarConteudo("contratos"); registrar(f.dataset.id ? "Alterou contrato" : "Cadastrou contrato", `${c.forn} · ${brl(c.valor)}`); S.ctEditando = ""; S.ctRascunho = null; S.ctFicha = id; toast("Contrato salvo."); render(); setTimeout(() => $("#ctFicha")?.scrollIntoView({ block: "start" }), 50); }
     catch (err) { S.contratos = antes; $("#ctMsg").textContent = mensagemErro(err); }
     return;
   }

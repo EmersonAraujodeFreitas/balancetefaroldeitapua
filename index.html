@@ -550,6 +550,22 @@ b.neg, td.neg { color: #b4231a; } td.pos { color: #1d7a4b; }
 .grupo-av { list-style: none; font-size: .78rem; font-weight: 800; text-transform: uppercase; letter-spacing: .05em; color: var(--brand); padding: 6px 0 0 !important; border: 0 !important; background: none !important; }
 #cardProposta input, #cardFundo input { font: inherit; border: 1px solid var(--line-2); border-radius: 6px; padding: 6px 8px; }
 @media (max-width: 700px) { .link-add { grid-template-columns: minmax(0, 1fr); } .ag { grid-template-columns: 48px minmax(0, 1fr); } .ag-quando { grid-column: 2; } }
+
+/* ===== contratos: importação e ficha */
+.importa-ct label.btn { cursor: pointer; }
+.revisao-ct th { width: 190px; text-align: left; background: #f3f7fa; font-size: .85rem; text-transform: none; letter-spacing: 0; position: static; }
+.revisao-ct td { vertical-align: top; }
+.form label.check { display: flex; align-items: center; gap: 8px; align-self: end; min-height: 40px; }
+.form label.check input { width: auto; min-height: 0; }
+#tabContratos tr.ativo td { background: #fff7e0; }
+.ficha-ct { border-top: 4px solid var(--gold); }
+.ficha-dados { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 230px), 1fr)); gap: 10px 20px; margin: 12px 0 0; }
+.ficha-dados div { border-left: 3px solid var(--line); padding-left: 10px; }
+.ficha-dados dt { font-size: .74rem; font-weight: 800; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); }
+.ficha-dados dd { margin: 2px 0 0; color: var(--ink); }
+.nf-tag { display: inline-block; margin: 2px 4px 2px 0; padding: 2px 8px; border-radius: 4px; background: #eef3f7; font-size: .82rem; white-space: nowrap; }
+.perguntas-ct { display: grid; gap: 8px; padding-left: 20px; margin: 8px 0 12px; }
+.ficha-ct h3 { margin: 2px 0 0; font-size: 1.05rem; color: var(--ink); }
 </style>
 </head>
 <body>
