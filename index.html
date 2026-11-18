@@ -1,0 +1,904 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Balancetes Farol de Itapuã</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="icon" type="image/png" sizes="32x32" href="img/favicon-32.png">
+<link rel="icon" type="image/png" sizes="48x48" href="img/favicon-48.png">
+<link rel="icon" type="image/png" sizes="192x192" href="img/favicon-192.png">
+<link rel="apple-touch-icon" sizes="180x180" href="img/favicon-180.png">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap">
+<style>
+/* Tema claro único, por escolha: branco predominante com as cores do Farol (azul petróleo, vermelho, amarelo).
+   Layout: faixa institucional azul-marinho com abas; corpo em papel claro com blocos de relatório
+   (situação → indicadores → gráfico → destaques → detalhe), números tabulares alinhados à direita. */
+:root {
+  --bg: #eef2f6; --surface: #ffffff; --surface-2: #f3f6f9; --ink: #0a1824; --muted: #3b4d5f; --line: #d6dee7; --line-2: #b6c3d0;
+  --brand: #054166; --brand-2: #0a5683; --brand-ink: #f2f7fb; --brand-muted: #a9c4d8;
+  --accent: #0b5a8c; --accent-soft: #e1edf6; --gold: #fbb812; --gold-ink: #6b4a00; --farol: #eb1a30; --desp: #8394a8;
+  --crit: #b4231a; --crit-soft: #fbe4e1; --warn: #9a6200; --warn-soft: #fdf0d2; --ok: #1d7a4b; --ok-soft: #ddf0e5; --info: #0b5a8c; --info-soft: #e1edf6;
+  --f-title: "Inter", "Segoe UI", system-ui, -apple-system, sans-serif;
+  --f-body: "Inter", "Segoe UI", system-ui, -apple-system, sans-serif;
+  --r: 6px;
+  --sombra: 0 1px 2px rgba(10, 40, 70, .08), 0 4px 14px rgba(10, 40, 70, .06);
+  color-scheme: light;
+}
+
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+html, body { margin: 0; }
+:root { padding-top: env(safe-area-inset-top, 0px); padding-bottom: env(safe-area-inset-bottom, 0px); }
+body { background: var(--bg); color: var(--ink); font: 16px/1.6 var(--f-body); -webkit-font-smoothing: antialiased; font-variant-numeric: tabular-nums; }
+body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-area-inset-top, 0px); z-index: 10; background: #ffffff; }
+.wrap { max-width: 1240px; margin: 0 auto; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+h1, h2, h3 { margin: 0; text-wrap: balance; }
+h1 { font-family: var(--f-title); font-weight: 800; font-size: 1.5rem; letter-spacing: -0.02em; }
+h2 { font-family: var(--f-title); font-weight: 700; font-size: 1.3rem; letter-spacing: -0.015em; color: var(--brand); }
+h3 { font-size: 1.05rem; font-weight: 700; color: var(--brand); }
+p { margin: 0; }
+a { color: var(--accent); }
+.num, td.n, .kpi b { font-variant-numeric: tabular-nums; }
+.muted { color: var(--muted); }
+.small { font-size: 0.92rem; }
+.eyebrow { font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.08em; color: var(--brand-2); font-weight: 700; }
+
+/* faixa institucional */
+header.top { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 5; background: #ffffff; color: var(--ink); border-bottom: 1px solid var(--line); box-shadow: 0 2px 12px rgba(5, 65, 102, .06); }
+header.top::before { content: ""; display: block; height: 4px; background: linear-gradient(90deg, var(--brand) 0 70%, var(--farol) 70% 85%, var(--gold) 85% 100%); }
+.logo { width: 56px; height: 56px; border-radius: 12px; background: #fff; padding: 2px; flex: none; border: 1px solid var(--line); }
+.top .linha { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 24px; padding-block: 14px 8px; }
+.brand { display: flex; align-items: center; gap: 14px; min-width: 0; }
+.brand .rotulo { font-size: 0.76rem; letter-spacing: 0.14em; text-transform: uppercase; color: var(--farol); font-weight: 700; }
+.brand h1 { color: var(--brand); line-height: 1.15; }
+.brand .sub { font-size: 0.9rem; color: var(--muted); }
+.periodo { margin-left: auto; display: flex; flex-wrap: wrap; gap: 8px; align-items: center; font-size: 0.92rem; color: var(--ink); font-weight: 600; }
+.periodo select { border-color: var(--line-2); color: var(--brand); font-weight: 600; }
+select, input[type="text"], input[type="password"], input[type="search"] {
+  font: inherit; font-size: 0.95rem; color: var(--ink); background: var(--surface); border: 1px solid var(--line-2); border-radius: var(--r); padding: 7px 10px; min-width: 0; }
+select:focus-visible, input:focus-visible, button:focus-visible, a:focus-visible, summary:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
+nav.abas { display: flex; gap: 2px; overflow-x: auto; scrollbar-width: none; }
+nav.abas a { padding: 12px 12px 13px; text-decoration: none; color: #2b4054; font-weight: 600; font-size: 0.94rem; border-bottom: 3px solid transparent; white-space: nowrap; }
+nav.abas a:hover { color: var(--brand); }
+nav.abas a[aria-current="page"] { color: var(--brand); border-bottom-color: var(--gold); font-weight: 800; background: #fff8e6; }
+nav.abas a .cnt { display: inline-block; min-width: 20px; padding: 0 6px; margin-left: 6px; border-radius: 99px; background: var(--crit); color: #fff; font-size: 0.72rem; font-weight: 600; text-align: center; }
+
+main .wrap { padding-block: 28px 44px; display: grid; grid-template-columns: minmax(0, 1fr); gap: 22px; }
+section[data-aba] { display: grid; grid-template-columns: minmax(0, 1fr); gap: 20px; min-width: 0; }
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 24px 26px; min-width: 0; box-shadow: var(--sombra); }
+.cab { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 8px 16px; }
+.cab-secao { display: grid; gap: 4px; padding-bottom: 2px; }
+.grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 420px), 1fr)); gap: 20px; }
+
+/* resumo executivo */
+.exec { display: grid; grid-template-columns: minmax(0, 1.05fr) minmax(0, 1.6fr); gap: 20px; }
+@media (max-width: 900px) { .exec { grid-template-columns: minmax(0, 1fr); } }
+.status { display: grid; gap: 12px; align-content: start; border-top: 4px solid var(--gold); background: linear-gradient(180deg, #fffdf6 0, #ffffff 120px); }
+.status.critico { border-top-color: var(--crit); } .status.atencao { border-top-color: var(--warn); } .status.estavel { border-top-color: var(--ok); }
+.status h2 { font-size: 1.5rem; }
+.status p { color: var(--ink); max-width: 60ch; font-size: 1rem; }
+.status .fatos { display: grid; gap: 8px; padding: 0; margin: 4px 0 0; list-style: none; font-size: 0.97rem; }
+.status .fatos li { display: flex; justify-content: space-between; gap: 12px; border-top: 1px solid var(--line); padding-top: 6px; }
+.status .fatos b { font-weight: 700; } .status .fatos .muted { color: var(--ink); }
+.kpis { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1px; background: var(--line); border: 1px solid var(--line); border-radius: var(--r); overflow: hidden; box-shadow: var(--sombra); }
+.kpis .kpi { border: 0; border-radius: 0; box-shadow: none; }
+.kpis-sec { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 200px), 1fr)); gap: 12px; }
+.kpi { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); padding: 16px 18px; display: grid; gap: 4px; align-content: start; min-width: 0; box-shadow: var(--sombra); }
+.kpi b { font-size: clamp(1.25rem, 2.1vw, 1.75rem); font-weight: 800; letter-spacing: -0.02em; white-space: nowrap; color: var(--brand); }
+.kpis-sec .kpi b { font-size: clamp(1.1rem, 1.6vw, 1.35rem); }
+.kpi .det { font-size: 0.9rem; color: var(--muted); }
+.kpi.neg b { color: var(--crit); } .kpi.pos b { color: var(--ok); }
+.kpi svg.spark { width: 100%; height: 34px; margin-top: 4px; }
+
+.leitura { display: grid; gap: 10px; padding: 0; margin: 0; list-style: none; }
+.leitura li { display: grid; grid-template-columns: 10px 1fr; gap: 12px; align-items: baseline; font-size: 1rem; }
+.leitura li::before { content: ""; width: 8px; height: 8px; border-radius: 2px; background: var(--gold); transform: translateY(-1px); }
+.leitura li.alta::before { background: var(--crit); } .leitura li.media::before { background: var(--warn); } .leitura li.ok::before { background: var(--ok); }
+
+.tabela { overflow-x: auto; border: 1px solid var(--line); border-radius: var(--r); background: var(--surface); box-shadow: var(--sombra); }
+table { border-collapse: collapse; width: 100%; font-size: 0.95rem; }
+th, td { padding: 11px 14px; border-bottom: 1px solid var(--line); text-align: left; vertical-align: top; }
+th { font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.06em; color: #1d3347; font-weight: 700; background: #e7edf4; position: sticky; top: 0; white-space: nowrap; border-bottom-color: var(--line-2); }
+td.n, th.n { text-align: right; white-space: nowrap; }
+tr.total td { font-weight: 700; background: var(--surface-2); border-top: 2px solid var(--line-2); border-bottom: 0; }
+tbody tr:hover td { background: var(--surface-2); }
+td.neg { color: var(--crit); }
+.mini { color: var(--muted); font-size: 0.86rem; }
+
+.chart svg { width: 100%; height: auto; display: block; }
+.chart text { fill: #33475b; font: 500 13px var(--f-body); }
+.chart text.anot { fill: var(--ink); font-weight: 700; }
+.legenda { display: flex; flex-wrap: wrap; gap: 18px; font-size: 0.9rem; color: var(--ink); font-weight: 500; }
+.legenda i { display: inline-block; width: 14px; height: 10px; border-radius: 1px; margin-right: 6px; vertical-align: 0; }
+.legenda i.linha { height: 2px; vertical-align: 3px; }
+
+.barra { height: 10px; border-radius: 3px; background: var(--surface-2); overflow: hidden; min-width: 60px; }
+.barra span { display: block; height: 100%; background: var(--accent); }
+
+.pill { display: inline-block; padding: 3px 10px; border-radius: 4px; font-size: 0.76rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.07em; white-space: nowrap; }
+.pill.alta, .pill.critico { background: var(--crit-soft); color: var(--crit); } .pill.media, .pill.atencao { background: var(--warn-soft); color: var(--warn); }
+.pill.baixa { background: var(--info-soft); color: var(--info); } .pill.info { background: var(--surface-2); color: var(--muted); }
+.pill.ok, .pill.estavel { background: var(--ok-soft); color: var(--ok); } .pill.local { background: var(--warn-soft); color: var(--warn); }
+
+.sevbar { display: flex; height: 8px; border-radius: 4px; overflow: hidden; background: var(--surface-2); }
+.sevbar span.alta { background: var(--crit); } .sevbar span.media { background: var(--warn); } .sevbar span.baixa { background: var(--info); } .sevbar span.info { background: var(--line-2); }
+.alertas { display: grid; gap: 10px; }
+.alerta { background: var(--surface); border: 1px solid var(--line); border-left: 3px solid var(--line-2); border-radius: var(--r); padding: 14px 18px; display: grid; gap: 6px; box-shadow: var(--sombra); }
+.alerta.alta { border-left-color: var(--crit); } .alerta.media { border-left-color: var(--warn); } .alerta.baixa { border-left-color: var(--info); }
+.alerta .linha1 { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+.alerta .tit { font-weight: 700; font-size: 1.04rem; }
+.alerta pre { margin: 0; white-space: pre-wrap; font: 0.93rem/1.6 var(--f-body); color: var(--muted); }
+.alerta .perg { font-size: 0.95rem; background: var(--surface-2); border-radius: 4px; padding: 8px 10px; }
+.alerta .perg::before { content: "Pergunta à administração: "; font-weight: 600; color: var(--ink); }
+.toplista { display: grid; gap: 0; }
+.toplista a { display: grid; grid-template-columns: auto 1fr; gap: 12px; align-items: baseline; padding: 10px 0; border-top: 1px solid var(--line); color: var(--ink); text-decoration: none; }
+.toplista a:first-child { border-top: 0; }
+.toplista a:hover .t { color: var(--accent); text-decoration: underline; }
+.filtros { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chip { border: 1px solid var(--line-2); background: var(--surface); color: var(--ink); border-radius: 6px; padding: 7px 14px; font: inherit; font-size: 0.9rem; font-weight: 600; cursor: pointer; }
+.chip[aria-pressed="true"] { background: var(--brand); border-color: var(--brand); color: var(--brand-ink); box-shadow: inset 0 -2px 0 var(--gold); }
+
+button.btn, label.btn { display: inline-block; font: inherit; font-weight: 700; font-size: 0.95rem; border-radius: var(--r); padding: 10px 18px; border: 1px solid var(--brand); background: var(--brand); color: var(--brand-ink); cursor: pointer; }
+button.btn.sec, label.btn.sec { background: var(--surface); color: var(--ink); border-color: var(--line-2); }
+button.btn.perigo { background: var(--surface); color: var(--crit); border-color: var(--crit); }
+button.link { font: inherit; background: none; border: 0; color: var(--accent); padding: 0; cursor: pointer; text-decoration: underline; text-underline-offset: 2px; font-size: 0.92rem; font-weight: 600; text-align: left; }
+button:disabled { opacity: 0.5; cursor: default; }
+
+.drop { border: 1.5px dashed var(--line-2); border-radius: var(--r); padding: 30px; text-align: center; display: grid; gap: 10px; justify-items: center; background: var(--surface); }
+.drop.over { border-color: var(--accent); background: var(--accent-soft); }
+.log { display: grid; gap: 6px; font-size: 0.86rem; }
+.log div { padding: 9px 12px; border-radius: var(--r); background: var(--surface-2); }
+.log .erro { background: var(--crit-soft); color: var(--crit); }
+.log .ok { background: var(--ok-soft); color: var(--ok); }
+.form { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 200px), 1fr)); gap: 10px; }
+.form label { display: grid; gap: 4px; font-size: 0.9rem; color: var(--ink); font-weight: 600; }
+.acoes { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+
+.texto { max-width: 74ch; display: grid; gap: 10px; align-content: start; }
+.texto ul, .texto ol { margin: 0; padding-left: 1.2em; display: grid; gap: 7px; }
+details.bloco { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); padding: 16px 22px; box-shadow: var(--sombra); }
+details.bloco summary { cursor: pointer; font-family: var(--f-title); font-weight: 700; font-size: 1.15rem; color: var(--brand); }
+details.bloco[open] summary { margin-bottom: 12px; }
+.minuta { font-family: var(--f-body); font-size: 1rem; background: var(--surface-2); border: 1px solid var(--line); border-radius: 4px; padding: 22px 26px; white-space: pre-wrap; line-height: 1.7; max-width: 82ch; }
+.vazio { padding: 30px; text-align: center; color: var(--muted); }
+.toast { position: fixed; right: max(16px, env(safe-area-inset-right, 0px)); bottom: calc(16px + env(safe-area-inset-bottom, 0px)); background: var(--brand); color: var(--brand-ink); padding: 11px 16px; border-radius: var(--r); font-size: 0.88rem; max-width: min(420px, calc(100vw - 32px)); z-index: 20; box-shadow: 0 6px 20px rgba(0,0,0,.2); }
+footer.rodape { border-top: 1px solid var(--line); }
+footer.rodape .wrap { padding-block: 20px 32px; display: flex; flex-wrap: wrap; justify-content: space-between; gap: 8px 24px; font-size: 0.88rem; color: var(--muted); }
+@media (max-width: 640px) {
+  .periodo { margin-left: 0; } h1 { font-size: 1.2rem; }
+  .kpis-sec { grid-template-columns: 1fr 1fr; gap: 8px; }
+  .kpi { padding: 12px 14px; } .card { padding: 16px; }
+}
+
+/* análises executivas */
+.comp-tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 190px), 1fr)); gap: 12px; }
+.comp { display: grid; gap: 4px; padding: 16px 18px; border-radius: 10px; background: var(--surface-2); border: 1px solid var(--line); }
+.comp b { font-size: 1.4rem; font-weight: 800; color: var(--brand); white-space: nowrap; }
+.comp .det { font-size: 0.9rem; display: flex; flex-wrap: wrap; gap: 6px; align-items: baseline; }
+.delta { font-weight: 800; font-size: 0.9rem; white-space: nowrap; }
+.delta.bom { color: var(--ok); } .delta.ruim { color: var(--crit); } .delta.neutro { color: var(--muted); }
+.rosca { display: grid; grid-template-columns: minmax(150px, 220px) minmax(0, 1fr); gap: 18px; align-items: center; }
+@media (max-width: 560px) { .rosca { grid-template-columns: minmax(0, 1fr); justify-items: center; } .rosca svg { max-width: 220px; } }
+.rosca svg { width: 100%; height: auto; }
+.leg-tab { list-style: none; margin: 0; padding: 0; display: grid; gap: 0; width: 100%; font-size: 0.95rem; }
+.leg-tab li { display: grid; grid-template-columns: 12px minmax(0, 1fr) auto 52px; gap: 10px; align-items: center; padding: 7px 0; border-top: 1px solid var(--line); }
+.leg-tab li:first-child { border-top: 0; }
+.leg-tab i { width: 12px; height: 12px; border-radius: 3px; }
+.leg-tab .v { font-weight: 600; white-space: nowrap; } .leg-tab .p { color: var(--muted); text-align: right; }
+.chart text.cat { fill: var(--ink); font-size: 13.5px; font-weight: 500; }
+.chart text.centro-l { fill: var(--muted); font-size: 12.5px; }
+.chart text.centro-v { fill: var(--brand); font-size: 24px; font-weight: 800; }
+.chart [data-tip] { cursor: default; transition: opacity .15s; }
+.chart svg:hover [data-tip]:not(:hover) { opacity: .7; }
+.conclusoes { margin: 12px 0 0; padding: 0; list-style: none; display: grid; gap: 10px; }
+.conclusoes li { padding: 4px 0 4px 16px; border-left: 4px solid var(--gold); max-width: 95ch; font-size: 1.02rem; }
+.tip { position: fixed; z-index: 30; pointer-events: none; background: var(--brand); color: #fff; font-size: 0.92rem; font-weight: 500; padding: 7px 10px; border-radius: 6px; max-width: 300px; box-shadow: 0 6px 18px rgba(5,65,102,.25); }
+
+/* layout de sistema: barra lateral fixa + área principal */
+.app { display: grid; grid-template-columns: 264px minmax(0, 1fr); min-height: 100vh; }
+.lateral { position: sticky; top: 0; height: 100vh; overflow-y: auto; background: #ffffff; border-right: 1px solid var(--line); display: flex; flex-direction: column; padding: 0 0 12px; z-index: 6; }
+.lateral::before { content: ""; display: block; height: 4px; flex: none; background: linear-gradient(90deg, var(--brand) 0 70%, var(--farol) 70% 85%, var(--gold) 85% 100%); }
+.marca { display: flex; align-items: center; gap: 12px; padding: 18px 18px 16px; border-bottom: 1px solid var(--line); }
+.marca .logo { width: 46px; height: 46px; border-radius: 10px; }
+.marca .rotulo { font-size: 0.7rem; letter-spacing: 0.12em; text-transform: uppercase; color: var(--farol); font-weight: 800; }
+.marca strong { font-size: 1.08rem; color: var(--brand); font-weight: 800; letter-spacing: -0.01em; }
+.menu { display: flex; flex-direction: column; gap: 2px; padding: 10px 10px; flex: 1; }
+.menu .grupo { font-size: 0.7rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); font-weight: 700; padding: 14px 10px 6px; }
+.menu a { display: flex; align-items: center; gap: 11px; padding: 9px 12px; border-radius: 8px; color: #23384b; text-decoration: none; font-weight: 600; font-size: 0.93rem; position: relative; }
+.menu a svg { width: 19px; height: 19px; flex: none; fill: none; stroke: currentColor; stroke-width: 1.9; stroke-linecap: round; stroke-linejoin: round; opacity: .85; }
+.menu a:hover { background: var(--surface-2); color: var(--brand); }
+.menu a[aria-current="page"] { background: #eaf2f8; color: var(--brand); font-weight: 800; }
+.menu a[aria-current="page"]::before { content: ""; position: absolute; left: -10px; top: 6px; bottom: 6px; width: 4px; border-radius: 0 4px 4px 0; background: var(--gold); }
+.menu a .cnt { margin-left: auto; min-width: 22px; padding: 1px 7px; border-radius: 99px; background: var(--crit); color: #fff; font-size: 0.74rem; font-weight: 700; text-align: center; }
+.lateral-rodape { margin: 0 14px; padding: 12px; border-radius: 8px; background: var(--surface-2); font-size: 0.8rem; color: var(--muted); display: flex; gap: 8px; align-items: baseline; line-height: 1.4; }
+.lateral-rodape .ponto { width: 8px; height: 8px; border-radius: 50%; background: var(--ok); flex: none; transform: translateY(-1px); }
+.principal { min-width: 0; display: flex; flex-direction: column; }
+.principal main { flex: 1; }
+.principal header.top::before { display: none; }
+.principal header.top .linha { padding-block: 16px 16px; }
+.principal .wrap { max-width: 1320px; }
+.barra-mes { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 14px; }
+.nota { padding: 12px 14px; border-radius: 8px; background: var(--surface-2); border-left: 3px solid var(--gold); font-size: 0.93rem; }
+td.calor { transition: filter .15s; } td.calor:hover { filter: brightness(1.08); outline: 2px solid var(--gold); outline-offset: -2px; }
+.acomp { display: grid; grid-template-columns: minmax(150px, 200px) minmax(0, 1fr); gap: 10px; align-items: start; border-top: 1px dashed var(--line-2); padding-top: 10px; margin-top: 4px; }
+.acomp textarea { font: inherit; font-size: 0.9rem; border: 1px solid var(--line-2); border-radius: 6px; padding: 7px 10px; min-height: 38px; resize: vertical; width: 100%; }
+.acomp select { width: 100%; }
+.sit { display: inline-block; padding: 2px 9px; border-radius: 4px; font-size: 0.74rem; font-weight: 700; }
+.sit.pendente { background: #fdecea; color: #a1281c; } .sit.questionado { background: #fdf0d2; color: #8a5800; } .sit.respondido { background: #e1edf6; color: #0b5a8c; } .sit.resolvido { background: #ddf0e5; color: #1d7a4b; } .sit.descartado { background: #eceff3; color: #586a7a; }
+@media (max-width: 960px) {
+  .app { grid-template-columns: minmax(0, 1fr); }
+  .lateral { position: sticky; height: auto; flex-direction: row; align-items: center; border-right: 0; border-bottom: 1px solid var(--line); padding: 0; overflow: visible; top: env(safe-area-inset-top, 0px); }
+  .lateral::before, .lateral-rodape, .menu .grupo { display: none; }
+  .menu { flex-direction: row; overflow-x: auto; padding: 6px; scrollbar-width: none; }
+  .menu a { white-space: nowrap; padding: 8px 10px; } .menu a[aria-current="page"]::before { display: none; }
+  .principal header.top { position: static; }
+  .acomp { grid-template-columns: minmax(0, 1fr); }
+}
+
+/* identidade do Farol: barra lateral azul petróleo, logo em destaque, acentos amarelo-sol e vermelho do farol */
+.lateral { background: linear-gradient(180deg, #054166 0%, #043a5b 55%, #032f4a 100%); color: #e6f0f7; border-right: 0; box-shadow: 2px 0 18px rgba(3, 47, 74, .18); }
+.lateral::before { background: linear-gradient(90deg, var(--farol) 0 34%, #ffffff 34% 40%, var(--farol) 40% 66%, var(--gold) 66% 100%); height: 5px; }
+.marca { flex-direction: column; align-items: center; gap: 10px; padding: 16px 20px 14px; border-bottom: 1px solid rgba(255,255,255,.12); }
+.logo-card { display: block; width: fit-content; margin: 0 auto; background: #ffffff; border-radius: 14px; padding: 8px 14px 6px; box-shadow: 0 6px 16px rgba(0, 0, 0, .25); border-bottom: 4px solid var(--gold); position: relative; overflow: hidden; }
+.logo-card::after { content: ""; position: absolute; top: 0; right: 0; width: 30px; height: 4px; background: var(--farol); }
+.logo-card img.logo-completa { display: block; width: 96px; height: auto; margin: 0 auto; }
+.logo-card img.logo-icone { display: none; }
+.marca-txt { display: grid; gap: 2px; text-align: center; }
+.marca-txt span { font-size: 0.72rem; letter-spacing: 0.16em; text-transform: uppercase; color: var(--gold); font-weight: 800; }
+.marca-txt strong { font-size: 1rem; color: #ffffff; font-weight: 700; }
+.menu .grupo { color: #8fb6d0; }
+.menu a { color: #dbe9f3; }
+.menu a svg { opacity: .9; }
+.menu a:hover { background: rgba(255, 255, 255, .08); color: #ffffff; }
+.menu a[aria-current="page"] { background: rgba(251, 184, 18, .16); color: #ffffff; font-weight: 800; box-shadow: inset 0 0 0 1px rgba(251, 184, 18, .35); }
+.menu a[aria-current="page"] svg { stroke: var(--gold); opacity: 1; }
+.menu a[aria-current="page"]::before { background: var(--gold); }
+.menu a .cnt { background: var(--farol); }
+.lateral-rodape { background: rgba(255, 255, 255, .08); color: #cfe1ee; }
+.lateral-rodape .ponto { background: var(--gold); }
+.principal header.top { border-bottom: 0; box-shadow: 0 6px 18px rgba(5, 65, 102, .07); }
+.principal header.top::after { content: ""; display: block; height: 4px; background: linear-gradient(90deg, var(--brand) 0 72%, var(--farol) 72% 84%, var(--gold) 84% 100%); }
+#tituloPagina { color: var(--brand); font-size: 1.65rem; }
+.cab-secao h2::after { content: ""; display: block; width: 42px; height: 4px; border-radius: 2px; margin-top: 8px; background: linear-gradient(90deg, var(--gold) 0 70%, var(--farol) 70% 100%); }
+.status h2::after, details.bloco h2::after { display: none; }
+.kpis { border-top: 4px solid var(--brand); }
+.kpis-sec .kpi, .comp-tiles .comp { border-top: 4px solid var(--brand); }
+.kpis-sec .kpi:nth-child(2n), .comp-tiles .comp:nth-child(2n) { border-top-color: var(--gold); }
+.kpis-sec .kpi.neg { border-top-color: var(--farol); }
+th { background: #e3eef6; color: var(--brand); }
+tr.total td { background: #fff7e0; border-top-color: var(--gold); }
+button.btn, label.btn { background: var(--brand); border-color: var(--brand); }
+button.btn.sec, label.btn.sec { border-color: var(--brand); color: var(--brand); }
+.chip[aria-pressed="true"] { background: var(--brand); border-color: var(--brand); box-shadow: inset 0 -3px 0 var(--gold); }
+.eyebrow { color: #0a5683; }
+.status { background: linear-gradient(160deg, #fff8e2 0, #ffffff 55%); border-top-color: var(--gold); }
+.status.critico { border-top-color: var(--farol); }
+body { background: #edf3f8; }
+@media (max-width: 960px) {
+  .lateral { box-shadow: 0 2px 12px rgba(3, 47, 74, .25); }
+  .marca { flex-direction: row; padding: 8px 10px; border: 0; }
+  .marca-txt { display: none; }
+  .logo-card { padding: 3px; border-radius: 10px; border-bottom-width: 3px; box-shadow: none; }
+  .logo-card::after { display: none; }
+  .logo-card img.logo-completa { display: none; }
+  .logo-card img.logo-icone { display: block; width: 40px; height: 40px; }
+  .menu a[aria-current="page"] { box-shadow: inset 0 -3px 0 var(--gold); }
+}
+@media (prefers-reduced-motion: no-preference) { .barra span { transition: width .4s ease; } }
+@media print {
+  .app { display: block; } .lateral { display: none !important; }
+  header.top { position: static; } nav.abas, .periodo, .acoes, #btnImprimir { display: none !important; }
+  body { background: #fff; } .card, .kpi, .tabela, .alerta { box-shadow: none; break-inside: avoid; }
+}
+
+/* ===== gráficos avançados */
+svg.g { width: 100%; height: auto; display: block; font-family: inherit; }
+svg.g text { font-size: 13px; fill: #3b4d5f; }
+svg.g .eixo-x { font-size: 12.5px; font-weight: 600; fill: #3b4d5f; }
+svg.g .eixo-cat { font-size: 13px; font-weight: 500; fill: #0a1824; }
+svg.g .val { font-size: 11.5px; font-weight: 700; fill: #0a1824; }
+svg.g .zona { font-size: 11.5px; font-weight: 600; fill: #b4231a; }
+svg.g .rot-faixa { font-size: 12px; font-weight: 700; fill: #054166; }
+svg.g .col { fill: transparent; cursor: crosshair; }
+svg.g .col:hover { fill: rgba(5,65,102,.05); }
+svg.g .no-t { font-size: 14px; font-weight: 700; fill: #0a1824; }
+svg.g .no-v { font-size: 12.5px; font-weight: 500; fill: #3b4d5f; }
+svg.g .centro-l { font-size: 12px; fill: #3b4d5f; }
+svg.g .centro-v { font-size: 22px; font-weight: 800; fill: #054166; }
+svg.g .banda { transition: opacity .15s; }
+svg.g .banda:hover { opacity: .6 !important; }
+svg.g .tm rect { transition: filter .15s; }
+svg.g .tm:hover rect { filter: brightness(1.12); }
+.chart svg.g:hover [data-tip]:not(:hover) { opacity: 1; }
+svg.treemap:hover .tm:not(:hover) { opacity: .75; }
+svg.fluxo:hover .banda:not(:hover) { opacity: .15; }
+@media (prefers-reduced-motion: no-preference) {
+  .anim-linha { stroke-dasharray: 1; stroke-dashoffset: 1; animation: traco 1.2s ease-out .2s forwards; }
+  @keyframes traco { to { stroke-dashoffset: 0; } }
+  .anim-bar { transform-box: fill-box; transform-origin: bottom; animation: cresce .6s ease-out both; }
+  @keyframes cresce { from { transform: scaleY(0); } }
+}
+.saude { display: grid; grid-template-columns: minmax(0, 340px) minmax(0, 1fr); gap: 28px; align-items: center; }
+.saude-g { text-align: center; }
+.saude-r { font-size: 1.15rem; font-weight: 800; letter-spacing: .04em; text-transform: uppercase; margin-top: -6px; }
+.saude-l { list-style: none; margin: 0; padding: 0; display: grid; gap: 14px; }
+.saude-l li { display: grid; gap: 4px; }
+.sd-top { display: flex; justify-content: space-between; gap: 10px; font-size: .95rem; color: var(--ink); }
+.sd-barra { height: 10px; background: #e8eef4; border-radius: 5px; overflow: hidden; }
+.sd-barra span { display: block; height: 100%; border-radius: 5px; }
+table.tend { width: 100%; border-collapse: collapse; }
+table.tend th { text-align: left; font-size: .8rem; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); padding: 8px 10px; border-bottom: 2px solid var(--line); background: none; }
+table.tend td { padding: 9px 10px; border-bottom: 1px solid var(--line); vertical-align: middle; }
+table.tend tr:hover td { background: #f6f9fc; }
+.chart svg.spark-cat, .spark-cat { width: 120px !important; height: 34px !important; display: block; }
+.delta { font-size: .85rem; font-weight: 700; white-space: nowrap; }
+.delta.ruim { color: #b4231a; } .delta.bom { color: #1d7a4b; } .delta.neutro { color: var(--muted); font-weight: 500; }
+.share { height: 8px; border-radius: 4px; background: #e8eef4; overflow: hidden; margin-bottom: 3px; }
+.share span { display: block; height: 100%; background: linear-gradient(90deg, #0b5a8c, #054166); border-radius: 4px; }
+.mult { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 14px; }
+.mult-c { border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px 10px; background: #fff; transition: box-shadow .15s, border-color .15s; }
+.mult-c:hover { border-color: #9fc0d8; box-shadow: 0 6px 18px rgba(5,65,102,.10); }
+.mult-c svg { width: 100%; height: auto; display: block; margin: 6px 0 4px; }
+.mult-h { display: flex; justify-content: space-between; gap: 8px; font-size: .92rem; font-weight: 600; color: var(--ink); }
+.mult-h b { color: #054166; }
+.mult-p { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 2px 8px; white-space: nowrap; font-size: .78rem; color: var(--muted); }
+.rosca { display: grid; grid-template-columns: 230px minmax(0, 1fr); gap: 20px; align-items: center; }
+.rosca svg { max-width: 230px; }
+.leg-tab { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.leg-tab li { display: grid; grid-template-columns: 14px minmax(0, 1fr) auto 56px; gap: 10px; align-items: center; font-size: .95rem; padding-bottom: 7px; border-bottom: 1px solid var(--line); }
+.leg-tab i { width: 12px; height: 12px; border-radius: 3px; }
+.leg-tab .v { font-weight: 700; font-variant-numeric: tabular-nums; } .leg-tab .p { text-align: right; color: var(--muted); font-variant-numeric: tabular-nums; }
+.bloco-titulo { display: flex; align-items: center; gap: 12px; margin: 26px 0 4px; }
+.bloco-titulo .num { width: 34px; height: 34px; border-radius: 10px; background: #054166; color: #fbb812; display: grid; place-items: center; font-weight: 800; }
+.bloco-titulo h2 { margin: 0; font-size: 1.25rem; } .bloco-titulo p { margin: 0; color: var(--muted); font-size: .9rem; }
+.grafico-largo { overflow-x: auto; } .grafico-largo > svg { min-width: 720px; }
+@media (max-width: 760px) { .saude, .rosca { grid-template-columns: minmax(0, 1fr); } .saude-g svg { max-width: 300px; margin: 0 auto; } }
+
+.passo-token summary { cursor: pointer; font-weight: 700; color: var(--accent); }
+.passo-token ol { margin: 8px 0 0; display: grid; gap: 4px; }
+.whats-txt { width: 100%; font: inherit; font-size: .95rem; line-height: 1.5; border: 1px solid var(--line-2); border-radius: 8px; padding: 12px 14px; background: #f7fbf8; resize: vertical; color: var(--ink); }
+.whats-txt:focus { outline: 2px solid #9fd8b5; border-color: #1f9d55; }
+a.btn.whats { display: inline-block; font-weight: 700; font-size: .95rem; border-radius: var(--r); padding: 10px 18px; border: 1px solid #1f8f4e; background: #1f8f4e; border-color: #1f8f4e; color: #fff; text-decoration: none; }
+a.btn.whats:hover { background: #18773f; }
+.sel-parecer { font: inherit; border: 1px solid var(--line-2); border-radius: 6px; padding: 6px 8px; margin-left: 4px; }
+/* alerta já respondido/resolvido: sai do destaque de prioridade */
+.alerta.tratado { border-left-color: #9fb0c2 !important; background: #fafbfc; }
+.alerta.tratado .linha1 .pill.alta, .alerta.tratado .linha1 .pill.media, .alerta.tratado .linha1 .pill.baixa { background: #eef1f4; color: #5b6b7b; border-color: #d6dee7; }
+/* ordenação por coluna */
+th.ordenavel { cursor: pointer; user-select: none; }
+th.ordenavel:hover { background: #d5e6f2; }
+th.ordenavel::after { content: "↕"; margin-left: 6px; opacity: .35; font-size: .85em; }
+th.ord-asc::after { content: "▲"; opacity: 1; color: var(--accent); }
+th.ord-desc::after { content: "▼"; opacity: 1; color: var(--accent); }
+th.ordenavel:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+/* ===== memória de cálculo */
+.memoria { margin-top: 14px; } .memoria summary { cursor: pointer; font-weight: 700; color: var(--brand); }
+.memoria td.pos { color: #1d7a4b; font-weight: 600; } .memoria td.neg { color: #a3401b; }
+/* ===== acompanhamento */
+.acomp { display: grid; grid-template-columns: minmax(0, 1fr); gap: 10px; border-top: 1px dashed var(--line-2); padding-top: 12px; margin-top: 4px; }
+.acomp-campos { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
+.acomp label { display: grid; gap: 4px; font-size: .85rem; font-weight: 600; color: var(--ink); }
+.acomp input[type=date], .acomp input[list], .acomp select { font: inherit; font-size: .9rem; border: 1px solid var(--line-2); border-radius: 6px; padding: 6px 8px; background: #fff; color: var(--ink); width: 100%; }
+.acomp textarea { font: inherit; font-size: .92rem; border: 1px solid var(--line-2); border-radius: 6px; padding: 8px 10px; min-height: 64px; resize: vertical; width: 100%; font-weight: 400; }
+.acomp textarea:focus, .acomp input:focus, .acomp select:focus { outline: 2px solid #9fc0d8; border-color: var(--accent); }
+.acomp-rodape { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; font-size: .82rem; }
+.salvo { color: var(--muted); } .salvo.ok { color: #1d7a4b; font-weight: 600; } .salvo.ok::before { content: "✓ "; } .salvo.erro { color: #b4231a; font-weight: 700; }
+.aging { font-size: .78rem; font-weight: 700; padding: 2px 8px; border-radius: 4px; background: #eef3f7; color: #0b5a8c; white-space: nowrap; }
+.aging.venc { background: #fdecea; color: #a1281c; } .aging.ok { background: #ddf0e5; color: #1d7a4b; } .aging.resp { background: #e1edf6; color: #0b5a8c; }
+.hist summary { cursor: pointer; color: var(--accent); font-weight: 600; }
+.hist ul { margin: 6px 0 0; padding-left: 18px; display: grid; gap: 3px; }
+.pill.novo { background: #fff3cd; color: #7a5200; border: 1px solid #fbb812; }
+#cfgGithub.destaque, .alerta.destaque { outline: 3px solid #fbb812; outline-offset: 2px; transition: outline .3s; }
+.sync-estado { font-size: .82rem; font-weight: 600; padding: 4px 10px; border-radius: 6px; background: #eef3f7; color: var(--muted); }
+.sync-estado:empty { display: none; }
+.sync-estado.ok { background: #ddf0e5; color: #1d7a4b; } .sync-estado.aguarda { background: #fdf0d2; color: #8a5800; }
+.sync-estado.local { background: #fff7e0; color: #7a5200; } .sync-estado.erro { background: #fdecea; color: #a1281c; }
+.faixa-acomp { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 22px; padding: 14px 20px; background: #fff; border: 1px solid var(--line); border-left: 4px solid var(--brand); border-radius: var(--r); box-shadow: var(--sombra); color: var(--ink); text-decoration: none; font-size: .95rem; }
+.faixa-acomp:hover { border-color: #9fc0d8; }
+.faixa-acomp.venc { border-left-color: var(--farol); }
+.faixa-acomp b { font-size: 1.15rem; color: var(--brand); }
+.faixa-acomp .fa-tit { font-weight: 800; color: var(--brand); text-transform: uppercase; letter-spacing: .06em; font-size: .78rem; }
+.faixa-acomp .fa-venc b { color: #b4231a; }
+.faixa-acomp .fa-ir { margin-left: auto; font-weight: 700; color: var(--accent); }
+.nov-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
+.nov-num { display: grid; gap: 4px; padding: 12px 14px; border: 1px solid var(--line); border-radius: 10px; background: #fbfcfe; }
+.nov-num b { font-size: 1.2rem; color: var(--brand); } .nov-num b.neg { color: #b4231a; }
+.nov-listas { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 18px; margin-top: 16px; }
+.nov-listas h4 { margin: 0 0 8px; font-size: .95rem; color: var(--ink); display: flex; align-items: center; gap: 8px; }
+.nov-listas ul { margin: 0; padding-left: 0; list-style: none; display: grid; gap: 8px; font-size: .9rem; }
+.cnt-n { background: var(--brand); color: #fff; border-radius: 10px; padding: 1px 8px; font-size: .78rem; }
+#pauta tr.linha-venc td { background: #fff6f5; }
+#pauta td { vertical-align: top; }
+#pauta td:nth-child(2) { min-width: 300px; }
+.oficio-ctl { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin: 10px 0; }
+.oficio-ctl input { font: inherit; border: 1px solid var(--line-2); border-radius: 6px; padding: 5px 8px; }
+#oficio { max-height: 420px; overflow: auto; }
+.checklist { width: 100%; border-collapse: collapse; font-size: .88rem; }
+.checklist th { font-size: .74rem; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); padding: 6px; border-bottom: 2px solid var(--line); vertical-align: bottom; }
+.checklist td { padding: 6px; border-bottom: 1px solid var(--line); }
+.checklist .c { text-align: center; }
+.ck { display: inline-grid; place-items: center; min-width: 30px; height: 30px; border-radius: 8px; border: 1.5px solid var(--line-2); background: #fff; font: inherit; font-weight: 800; color: #fff; cursor: pointer; text-decoration: none; }
+span.ck { cursor: default; }
+.ck.on { background: #2a9d8f; border-color: #2a9d8f; }
+.ck.x { background: #fdecea; border-color: #f3c2bc; color: #a1281c; font-size: .74rem; padding: 0 6px; width: auto; }
+.prog { height: 8px; background: #e8eef4; border-radius: 4px; overflow: hidden; min-width: 70px; }
+.prog span { display: block; height: 100%; background: linear-gradient(90deg, #2a9d8f, #1d7a4b); }
+.orfas { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
+.orfas li { border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; display: grid; gap: 4px; }
+.orfa-txt { white-space: pre-wrap; background: #fbfcfe; border-left: 3px solid #fbb812; padding: 6px 10px; }
+@media (max-width: 900px) { .acomp-campos { grid-template-columns: repeat(2, minmax(0, 1fr)); } .nov-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } .nov-listas { grid-template-columns: minmax(0, 1fr); } .faixa-acomp .fa-ir { margin-left: 0; } }
+
+/* ===== acesso */
+.acesso { position: fixed; inset: 0; z-index: 50; display: grid; place-items: center; padding: 24px max(16px, env(safe-area-inset-left, 0px)); background: linear-gradient(160deg, #04324f 0%, #054166 55%, #0a5683 100%); overflow-y: auto; }
+.acesso::after { content: ""; position: fixed; left: 0; right: 0; bottom: 0; height: 6px; background: linear-gradient(90deg, var(--brand) 0 60%, var(--farol) 60% 75%, var(--gold) 75%); }
+.acesso-caixa { width: min(420px, 100%); background: #fff; border-radius: 18px; padding: 28px 28px 24px; box-shadow: 0 24px 60px rgba(0, 0, 0, .35); border-top: 5px solid var(--gold); display: grid; gap: 16px; }
+.acesso-marca { display: flex; gap: 14px; align-items: center; }
+.acesso-marca img { width: 72px; height: auto; }
+.acesso-marca strong { display: block; font-size: 1.15rem; color: var(--brand); }
+.acesso-form { display: grid; gap: 12px; }
+.acesso-form h1 { margin: 0; font-size: 1.35rem; color: var(--ink); }
+.acesso-form label { display: grid; gap: 5px; font-size: .9rem; font-weight: 600; color: var(--ink); }
+.acesso-form input, .acesso-form select { font: inherit; font-size: 1rem; border: 1px solid var(--line-2); border-radius: 8px; padding: 10px 12px; background: #fff; color: var(--ink); }
+.acesso-form input:focus, .acesso-form select:focus { outline: 2px solid #9fc0d8; border-color: var(--accent); }
+.acesso-form .btn { width: 100%; padding: 12px; font-size: 1rem; }
+.acesso-msg { margin: 0; padding: 10px 12px; border-radius: 8px; background: #fdecea; color: #a1281c; font-weight: 600; font-size: .92rem; }
+.acesso-msg.ok { background: #ddf0e5; color: #1d7a4b; }
+.acesso-carregando { text-align: center; color: var(--muted); padding: 12px; }
+body.travado .app { visibility: hidden; }
+.usuario-box { margin: 0 14px 10px; padding: 12px; border-radius: 8px; background: rgba(255, 255, 255, .1); color: #fff; display: grid; gap: 6px; font-size: .85rem; }
+.usuario-box strong { display: block; font-size: .95rem; }
+.usuario-box span { color: #cfe1ee; }
+.ub-acoes { display: flex; gap: 14px; }
+.ub-acoes .link { color: var(--gold); font-weight: 700; background: none; border: 0; padding: 0; cursor: pointer; font: inherit; font-size: .85rem; }
+.credencial { margin-top: 14px; padding: 14px; border-radius: 10px; background: #fff7e0; border: 1px solid #fbb812; display: grid; gap: 8px; }
+.credencial pre { margin: 0; white-space: pre-wrap; font-size: .95rem; background: #fff; padding: 10px; border-radius: 6px; border: 1px dashed #e0b84c; }
+.regras { margin-top: 12px; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+.regras .cab { padding: 8px 12px; background: #eef3f7; display: flex; justify-content: space-between; align-items: center; }
+.regras pre { margin: 0; padding: 12px; max-height: 260px; overflow: auto; font-size: .78rem; background: #fbfcfe; }
+ol.passos { display: grid; gap: 8px; padding-left: 20px; }
+#tabAcessos td { vertical-align: middle; }
+#tabAcessos select { font: inherit; font-size: .88rem; border: 1px solid var(--line-2); border-radius: 6px; padding: 4px 6px; }
+.acoes-lin { display: flex; flex-wrap: wrap; gap: 6px; }
+.acoes-lin button { font: inherit; font-size: .82rem; font-weight: 600; border: 1px solid var(--line-2); background: #fff; border-radius: 6px; padding: 4px 9px; cursor: pointer; color: var(--brand); }
+.acoes-lin button.perigo { color: #a1281c; border-color: #f0b8b0; }
+body[data-perfil="visualizacao"] .so-editor, body[data-perfil="conselheiro"] .so-admin, body[data-perfil="visualizacao"] .so-admin { display: none !important; }
+
+/* ===== resumo do mês */
+.parecer-card { display: flex; gap: 18px; align-items: center; padding: 22px 24px; border-radius: var(--r); background: #fff; border: 1px solid var(--line); border-left: 6px solid #2a9d8f; box-shadow: var(--sombra); }
+.parecer-card h2 { margin: 2px 0 4px; font-size: 1.45rem; color: var(--ink); }
+.parecer-card p { margin: 0; color: var(--muted); }
+.parecer-card .pc-ic { font-size: 2.4rem; line-height: 1; }
+.parecer-card.atencao { border-left-color: #e0a100; } .parecer-card.analise { border-left-color: var(--accent); } .parecer-card.critico { border-left-color: var(--farol); }
+.resumo-nums { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px; }
+.rn { display: grid; gap: 4px; padding: 16px 18px; background: #fff; border: 1px solid var(--line); border-radius: var(--r); box-shadow: var(--sombra); }
+.rn b { font-size: 1.5rem; color: var(--brand); } .rn b.neg { color: #b4231a; } .rn b.pos { color: #1d7a4b; }
+.barras-simples { list-style: none; margin: 12px 0 0; padding: 0; display: grid; gap: 12px; }
+.bs-top { display: flex; justify-content: space-between; gap: 10px; font-size: .95rem; }
+.bs-trilho { position: relative; height: 10px; background: #e8eef4; border-radius: 5px; margin: 4px 0 2px; }
+.bs-trilho span { display: block; height: 100%; border-radius: 5px; background: linear-gradient(90deg, #0b5a8c, #054166); }
+.bs-trilho span.acima { background: linear-gradient(90deg, #e07b4f, #d9663a); }
+.bs-trilho i { position: absolute; top: -4px; width: 3px; height: 18px; background: #c98a00; border-radius: 2px; transform: translateX(-1px); }
+.lista-pend { list-style: none; margin: 10px 0 0; padding: 0; display: grid; gap: 10px; }
+.lista-pend li { display: grid; gap: 3px; padding: 10px 12px; border: 1px solid var(--line); border-left: 4px solid var(--accent); border-radius: 8px; background: #fbfcfe; font-size: .92rem; }
+.lista-pend li.venc { border-left-color: var(--farol); background: #fff6f5; }
+b.neg, td.neg { color: #b4231a; } td.pos { color: #1d7a4b; }
+.aviso-caixa { width: min(560px, 100%); border-top-color: var(--farol); }
+.aviso-caixa .lista-pend li { border-left-color: var(--farol); }
+/* ===== orçamento */
+.exec-bar { position: relative; display: inline-block; width: 90px; height: 8px; background: #e8eef4; border-radius: 4px; margin-right: 8px; vertical-align: middle; }
+.exec-bar span { display: block; height: 100%; border-radius: 4px; }
+.exec-bar i { position: absolute; top: -3px; width: 2px; height: 14px; background: #054166; }
+.q-ok { background: #cdebe0; } .q-medio { background: #fbe7b8; } .q-alto { background: #f6c9bb; }
+.exec-bar .q-ok { background: #2a9d8f; } .exec-bar .q-medio { background: #e0a100; } .exec-bar .q-alto { background: #d9663a; }
+.mapa-orc { border-collapse: collapse; width: 100%; font-size: .85rem; }
+.mapa-orc th { font-size: .72rem; padding: 6px; } .mapa-orc td { padding: 6px; border: 2px solid #fff; white-space: nowrap; }
+.mapa-orc .c { text-align: center; font-weight: 600; }
+.orc-v { font: inherit; width: 140px; text-align: right; border: 1px solid var(--line-2); border-radius: 6px; padding: 5px 8px; }
+#fOrc .form input { font: inherit; }
+/* ===== documento do parecer */
+.doc-overlay { position: fixed; inset: 0; z-index: 60; background: #5b6875; display: grid; grid-template-rows: auto 1fr; }
+.doc-barra { display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center; padding: 10px max(16px, env(safe-area-inset-left, 0px)); background: var(--brand); color: #fff; }
+.doc-barra .acoes { margin-left: auto; } .doc-barra .btn.sec { background: #fff; }
+.doc-area { overflow: auto; padding: 24px 16px 60px; }
+.folha { background: #fff; color: #111; width: min(210mm, 100%); min-height: 297mm; margin: 0 auto; padding: 22mm 20mm; box-shadow: 0 10px 30px rgba(0, 0, 0, .35); font: 11.5pt/1.55 "Inter", Arial, sans-serif; outline: none; }
+.folha h1 { font-size: 14pt; text-align: center; margin: 18px 0 6px; letter-spacing: .02em; color: #111; }
+.folha h2 { font-size: 12pt; color: #054166; margin: 18px 0 6px; }
+.folha .doc-ref { text-align: center; color: #444; margin-top: 0; }
+.doc-cab { display: flex; gap: 14px; align-items: center; border-bottom: 3px solid #fbb812; padding-bottom: 10px; }
+.doc-cab b { display: block; font-size: 12pt; color: #054166; } .doc-cab span { color: #555; }
+.doc-tab { width: 100%; border-collapse: collapse; margin: 6px 0; font-size: 10.5pt; }
+.doc-tab td, .doc-tab th { border: 1px solid #bbb; padding: 4px 8px; text-align: left; background: none; color: #111; position: static; text-transform: none; letter-spacing: 0; font-size: 10.5pt; }
+.doc-tab th { background: #e3eef6; } .doc-tab .n { text-align: right; } .doc-tab .sub td { font-weight: 700; background: #f3f6f9; }
+.doc-data { margin-top: 24px; }
+.assinaturas { display: grid; grid-template-columns: repeat(3, 1fr); gap: 24px; margin-top: 48px; text-align: center; font-size: 10pt; }
+.assinaturas span { display: block; border-top: 1px solid #333; margin-bottom: 4px; }
+@media print {
+  body.com-doc > *:not(#docParecer) { display: none !important; }
+  body.com-doc #docParecer { position: static; display: block; background: none; }
+  body.com-doc .doc-barra { display: none; }
+  body.com-doc .doc-area { padding: 0; overflow: visible; }
+  body.com-doc .folha { box-shadow: none; width: auto; min-height: 0; padding: 0; }
+  @page { size: A4; margin: 18mm 16mm; }
+}
+@media (max-width: 900px) { .resumo-nums { grid-template-columns: repeat(2, minmax(0, 1fr)); } .assinaturas { grid-template-columns: 1fr; } .folha { padding: 18px; } }
+</style>
+</head>
+<body>
+<div class="acesso" id="telaAcesso" hidden>
+  <div class="acesso-caixa">
+    <div class="acesso-marca"><img src="img/logo-farol.png" alt="Condomínio Farol de Itapuã" width="96"><div><span class="eyebrow">Conselho Fiscal</span><strong>Análise de balancetes</strong></div></div>
+    <p class="acesso-msg" id="acessoMsg" role="alert" hidden></p>
+    <form id="fLogin" class="acesso-form" hidden autocomplete="on">
+      <h1>Entrar</h1>
+      <label>Usuário<input id="lgUsuario" name="username" autocomplete="username" required autocapitalize="none" spellcheck="false"></label>
+      <label>Senha<input id="lgSenha" name="password" type="password" autocomplete="current-password" required></label>
+      <button class="btn" type="submit">Entrar</button>
+      <p class="mini">Não tem acesso ou esqueceu a senha? Fale com o administrador do conselho.</p>
+    </form>
+    <form id="fTroca" class="acesso-form" hidden>
+      <h1>Crie sua senha</h1>
+      <p class="small">Este é o seu primeiro acesso com uma senha provisória. Defina agora a sua senha pessoal.</p>
+      <label>Nova senha<input id="trNova" type="password" autocomplete="new-password" required minlength="8"></label>
+      <label>Repita a nova senha<input id="trRepete" type="password" autocomplete="new-password" required minlength="8"></label>
+      <p class="mini">Pelo menos 8 caracteres, com letras e números.</p>
+      <button class="btn" type="submit">Salvar e entrar</button>
+      <button class="link" type="button" data-sair>Sair</button>
+    </form>
+    <form id="fPrimeiro" class="acesso-form" hidden>
+      <h1>Criar o administrador</h1>
+      <p class="small">Nenhum acesso foi criado ainda. Este será o administrador, que depois cria os acessos dos demais.</p>
+      <label>Nome<input id="paNome" required autocomplete="name"></label>
+      <label>Usuário<input id="paUsuario" required autocapitalize="none" spellcheck="false" autocomplete="username"></label>
+      <label>Senha<input id="paSenha" type="password" required minlength="8" autocomplete="new-password"></label>
+      <label>Repita a senha<input id="paRepete" type="password" required minlength="8" autocomplete="new-password"></label>
+      <button class="btn" type="submit">Criar administrador</button>
+    </form>
+    <div id="acessoCarregando" class="acesso-carregando">Conectando…</div>
+  </div>
+</div>
+<div class="app">
+<aside class="lateral">
+  <div class="marca">
+    <a class="logo-card" href="#painel" aria-label="Ir para o resumo">
+      <img class="logo-completa" src="img/logo-farol.png" alt="Condomínio Farol de Itapuã" width="480" height="523">
+      <img class="logo-icone" src="img/icone-farol.png" alt="Condomínio Farol de Itapuã" width="96" height="96">
+    </a>
+    <div class="marca-txt"><span>Conselho Fiscal</span><strong>Análise de balancetes</strong></div>
+  </div>
+  <nav class="menu" aria-label="Seções">
+    <div class="grupo">Visão geral</div>
+    <a href="#resumo"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M8 12l3 3 5-6"/></svg><span>Resumo do mês</span></a>
+    <a href="#painel"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 13h8V3H3zM13 21h8V11h-8zM3 21h8v-6H3zM13 3v6h8V3z"/></svg><span>Resumo executivo</span></a>
+    <a href="#analises"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 19V9M10 19V5M16 19v-7M22 19H2"/></svg><span>Análises comparativas</span></a>
+    <a href="#mes"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="17" rx="2"/><path d="M3 9h18M8 2v4M16 2v4"/></svg><span>Relatório do mês</span></a>
+    <a href="#projecao"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 17l6-6 4 4 8-8"/><path d="M15 7h6v6"/></svg><span>Projeção de caixa</span></a>
+    <div class="grupo">Detalhamento</div>
+    <a href="#categorias"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3a9 9 0 1 0 9 9h-9z"/><path d="M15 3.5A9 9 0 0 1 20.5 9H15z"/></svg><span>Categorias</span></a>
+    <a href="#orcamento"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20V10M10 20V4M16 20v-8"/><path d="M2 8h20" stroke-dasharray="3 2"/></svg><span>Orçado x realizado</span></a>
+    <a href="#fornecedores"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 21V8l9-5 9 5v13"/><path d="M9 21v-7h6v7"/></svg><span>Fornecedores</span></a>
+    <a href="#lancamentos"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/></svg><span>Lançamentos</span></a>
+    <a href="#parcelas"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20M6 15h4"/></svg><span>Parcelas a vencer</span></a>
+    <div class="grupo">Fiscalização</div>
+    <a href="#acompanhamento"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="4" width="16" height="17" rx="2"/><path d="M9 3h6v3H9zM8 11l2 2 4-4M8 17h8"/></svg><span>Acompanhamento</span><span class="cnt" id="cntVenc" hidden></span></a>
+    <a href="#alertas"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l10 18H2z"/><path d="M12 10v5M12 18h.01"/></svg><span>Alertas</span><span class="cnt" id="cntAlertas"></span></a>
+    <a href="#notas"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><path d="M14 3v6h6M8 13h8M8 17h5"/></svg><span>Notas da administradora</span></a>
+    <a href="#conselho"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 11l3 3 8-8"/><path d="M20 12v7a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h9"/></svg><span>Parecer e reunião</span></a>
+    <div class="grupo">Base de dados</div>
+    <a href="#administracao" id="menuAdmin"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="9" cy="8" r="4"/><path d="M2 21a7 7 0 0 1 14 0M19 8v6M16 11h6"/></svg><span>Administração</span></a>
+    <a href="#dados" id="menuDados"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12M7 8l5-5 5 5"/><path d="M4 15v4a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-4"/></svg><span>Importar balancetes</span></a>
+  </nav>
+  <div class="usuario-box" id="usuarioBox" hidden><div><strong id="ubNome"></strong><span id="ubPerfil"></span></div>
+    <div class="ub-acoes"><button type="button" class="link" id="btnMinhaSenha">Alterar senha</button><button type="button" class="link" data-sair>Sair</button></div></div>
+  <div class="lateral-rodape"><span class="ponto"></span><span id="statusBase">carregando…</span></div>
+</aside>
+<div class="principal">
+<header class="top">
+  <div class="wrap">
+    <div class="linha">
+      <div class="brand">
+        <div>
+          <div class="rotulo" id="grupoPagina">Visão geral</div>
+          <h1 id="tituloPagina">Resumo executivo</h1>
+          <div class="sub"><span id="nomeCond">Condomínio Farol de Itapuã</span> · Administradora: Logo Gestão Condominial</div>
+        </div>
+      </div>
+      <div class="periodo">
+        <label for="de">Período</label><select id="de"></select>
+        <label for="ate">a</label><select id="ate"></select>
+      </div>
+    </div>
+  </div>
+</header>
+
+<main><div class="wrap">
+
+<section data-aba="resumo" hidden>
+  <div class="cab"><div class="cab-secao"><span class="eyebrow">Visão rápida</span><h2>Como ficaram as contas</h2></div>
+    <label class="small">Mês <select id="resumoMesSel" class="sel-parecer"></select></label></div>
+  <div id="secResumo"></div>
+</section>
+
+<section data-aba="orcamento" hidden>
+  <div id="secOrcamento"></div>
+</section>
+
+<section data-aba="painel">
+  <div class="exec">
+    <div class="card status" id="statusCard">
+      <div class="cab"><span class="eyebrow">Situação financeira</span><span class="pill" id="statusPill"></span></div>
+      <h2 id="statusTitulo"></h2>
+      <p id="statusTexto"></p>
+      <ul class="fatos" id="statusFatos"></ul>
+    </div>
+    <div class="kpis" id="kpis"></div>
+  </div>
+  <div class="kpis-sec" id="kpis2"></div>
+  <div id="faixaAcomp"></div>
+  <div class="card chart">
+    <div class="cab"><div class="cab-secao"><span class="eyebrow">Evolução mensal</span><h2>Receitas, despesas e saldo de caixa</h2></div>
+      <div class="legenda"><span><i style="background:linear-gradient(#1673ad,#054166)"></i>Receita</span><span><i style="background:linear-gradient(#a7b6c6,#7b8ea4)"></i>Despesa</span><span><i class="linha" style="background:var(--gold)"></i>Saldo no fim do mês</span><span><i style="background:#2a9d8f"></i>Sobra</span><span><i style="background:#d9663a"></i>Déficit</span></div></div>
+    <div id="grafMensal" class="grafico-largo" style="margin-top:12px"></div>
+  </div>
+  <div class="grid2">
+    <div class="card"><div class="cab"><div class="cab-secao"><span class="eyebrow">Recalculado a cada balancete</span><h2>Destaques do período</h2></div></div><ul class="leitura" id="leitura" style="margin-top:14px"></ul></div>
+    <div class="card"><div class="cab"><div class="cab-secao"><span class="eyebrow">Prioridade alta</span><h2>Pontos de atenção</h2></div><a href="#alertas" class="small">Todos os alertas</a></div><div class="toplista" id="topAlertas" style="margin-top:10px"></div></div>
+  </div>
+  <div class="card"><div class="cab"><div class="cab-secao"><span class="eyebrow">Termômetro</span><h2>Índice de saúde financeira</h2></div><span class="small muted">0 a 100 · recalculado a cada balancete</span></div><div id="saude" style="margin-top:12px"></div></div>
+  <div class="card chart"><div class="cab"><div class="cab-secao"><span class="eyebrow">Composição</span><h2>Para onde foi o dinheiro</h2></div><a href="#categorias" class="small">Detalhar por mês</a></div>
+    <p class="small muted" style="margin:6px 0 12px">Cada bloco é proporcional ao valor gasto na categoria. Passe o mouse para ver o valor.</p>
+    <div id="treemap" class="grafico-largo"></div>
+    <div id="miniCats" class="tabela-limpa" style="margin-top:18px;overflow-x:auto"></div></div>
+  <div class="cab-secao"><span class="eyebrow">Demonstrativo consolidado</span><h2>Resultado mês a mês</h2></div>
+  <div class="tabela"><table id="tabMensal"></table></div>
+</section>
+
+<section data-aba="analises" hidden id="secAnalises"></section>
+
+<section data-aba="mes" hidden id="secMes"></section>
+
+<section data-aba="projecao" hidden id="secProjecao"></section>
+
+<section data-aba="categorias" hidden>
+  <div class="cab"><div class="cab-secao"><span class="eyebrow">Análise vertical</span><h2>Despesas por categoria e mês</h2></div><span class="small muted">Mapa de calor: quanto mais escuro, maior o gasto. Passe o mouse para ver o valor exato.</span></div>
+  <div class="tabela"><table id="tabCats"></table></div>
+  <div class="card"><div class="cab-secao"><span class="eyebrow">Tendência individual</span><h2>Cada categoria mês a mês</h2></div><p class="small muted" style="margin:6px 0 12px">Linha tracejada dourada = média do período · ponto laranja = pico.</p><div id="grafCats"></div></div>
+</section>
+
+<section data-aba="fornecedores" hidden>
+  <div id="fichaForn"></div>
+  <div class="cab"><div class="cab-secao"><span class="eyebrow">Concentração de pagamentos</span><h2>Ranking de fornecedores</h2></div><input type="search" id="buscaForn" placeholder="Buscar fornecedor" aria-label="Buscar fornecedor"></div>
+  <div class="tabela"><table id="tabForn"></table></div>
+</section>
+
+<section data-aba="acompanhamento" hidden>
+  <div class="cab"><div class="cab-secao"><span class="eyebrow">Fiscalização contínua</span><h2>Pendências, prazos e conferência mensal</h2></div>
+    <div class="acoes"><span class="sync-estado"></span><button class="btn sec" type="button" id="btnSyncAgora">Enviar agora</button></div></div>
+  <p class="small muted">Considera todos os balancetes carregados, independentemente do período escolhido no topo. As anotações são gravadas a cada tecla neste navegador e, com o GitHub configurado na aba Importar PDF, enviadas automaticamente para que todo o conselho veja a mesma informação.</p>
+  <div class="kpis-sec" id="kpisPauta"></div>
+
+  <div class="card"><div class="cab"><div class="cab-secao"><span class="eyebrow">Último balancete</span><h2 id="tituloNovidades">O que mudou no último balancete</h2></div></div><div id="novidades" style="margin-top:14px"></div></div>
+
+  <div class="cab-secao"><span class="eyebrow">Pauta</span><h2>Pendências com a administradora</h2></div>
+  <p class="small muted" style="margin-top:-6px">Prazos vencidos aparecem primeiro. Clique no assunto para registrar a resposta.</p>
+  <div class="tabela"><table id="pauta"></table></div>
+
+    <div class="card texto"><div class="cab"><div class="cab-secao"><span class="eyebrow">Envio</span><h2>Ofício de questionamentos</h2></div><span class="small muted" id="nOficio"></span></div>
+      <div class="oficio-ctl"><label class="small">Prazo de resposta <input id="prazoDias" type="number" min="1" max="90" value="15" style="width:70px"> dias</label>
+        <button class="btn sec" type="button" id="copiarOficio">Copiar texto</button><button class="btn" type="button" id="marcarEnviados">Marcar como enviados</button></div>
+      <pre class="minuta" id="oficio"></pre>
+      <p class="mini">Depois de enviar à administradora, clique em "Marcar como enviados": cada pergunta passa a "Questionado", com data de envio e prazo.</p></div>
+    <div class="card"><div class="cab-secao"><span class="eyebrow">Rotina mensal</span><h2>Conferência de cada balancete</h2></div>
+      <p class="small muted" style="margin:6px 0 10px">"Balancete fecha" e "Alertas tratados" são verificados automaticamente. Clique nas demais etapas quando concluídas.</p>
+      <div style="overflow-x:auto"><table id="checklist" class="checklist"></table></div></div>
+
+  <div class="card"><div class="cab"><div class="cab-secao"><span class="eyebrow">Comunicação aos moradores</span><h2>Mensagem para o grupo de avisos do WhatsApp</h2></div><span class="small muted" id="whatsInfo"></span></div>
+    <p class="small muted" style="margin:6px 0 10px">Resumo curto do último balancete, já formatado para o WhatsApp (*negrito* e _itálico_). Revise e ajuste o texto antes de enviar. No parecer "Automático": não validado se os totais não fecham; validado quando a etapa "Aprovado" do mês estiver marcada na conferência abaixo (com ressalvas se houver pergunta "Questionado" aguardando resposta); caso contrário, em análise.</p>
+    <div class="oficio-ctl"><label class="small">Parecer <select id="whatsParecer" class="sel-parecer">
+        <option value="auto">Automático</option><option value="validado">Validado</option><option value="ressalvas">Validado com ressalvas</option><option value="analise">Em análise</option><option value="nao">Não validado</option></select></label>
+      <label class="small"><input type="checkbox" id="whatsResp"> Incluir respostas recebidas</label>
+      <label class="small"><input type="checkbox" id="whatsLink"> Incluir link do painel</label>
+      <button class="btn sec" type="button" id="gerarWhats">Gerar novamente</button>
+      <button class="btn sec" type="button" id="copiarWhats">Copiar mensagem</button>
+      <a class="btn whats" id="abrirWhats" href="https://wa.me/" target="_blank" rel="noopener">Abrir no WhatsApp</a></div>
+    <textarea id="whatsTexto" class="whats-txt" rows="10" spellcheck="true"></textarea>
+    <p class="mini">"Abrir no WhatsApp" abre o aplicativo com a mensagem pronta para você escolher o grupo. Se não abrir, use "Copiar mensagem" e cole no grupo.</p></div>
+
+  <div class="card" id="orfas" hidden><div class="cab-secao"><span class="eyebrow">Anotações preservadas</span><h2>Registros sem alerta correspondente</h2></div>
+    <p class="small muted" style="margin:6px 0 10px">Anotações de alertas que mudaram de texto ou deixaram de aparecer nos dados. Nada é apagado.</p><ul class="orfas" id="listaOrfas"></ul></div>
+</section>
+
+<section data-aba="alertas" hidden>
+  <div class="cab"><div class="cab-secao"><span class="eyebrow">Auditoria automática</span><h2>Alertas e respostas</h2></div><div class="acoes"><button class="btn sec" type="button" id="btnCsvAlertas">Baixar alertas (CSV)</button></div></div>
+  <div class="kpis-sec" id="kpisAcomp"></div>
+  <div class="filtros"><span class="small" style="font-weight:600">Prioridade:</span><div class="chips" id="filtroSev"></div><span class="small" style="font-weight:600;margin-left:8px">Situação:</span><div class="chips" id="filtroSit"></div></div>
+  <div class="sevbar" id="sevbar"></div>
+  <p class="small muted">As regras rodam sobre todos os meses do período escolhido: duplicidades, NF reutilizada, parcelas repetidas ou paradas, despesas que sumiram, contratos que mudaram de valor, custos financeiros, documentação e estrutura da receita. Um balancete novo entra nas regras assim que é importado.</p>
+  <div class="alertas" id="listaAlertas"></div>
+</section>
+
+<section data-aba="parcelas" hidden>
+  <div class="kpis" id="kpisParc"></div>
+  <div class="tabela"><table id="tabParc"></table></div>
+  <p class="small muted">Séries reconhecidas pelo texto "Parcela NN/TT" do balancete. Quando a administradora troca o valor ou a numeração no meio do caminho, a série mais recente prevalece.</p>
+</section>
+
+<section data-aba="lancamentos" hidden>
+  <div class="filtros">
+    <input type="search" id="buscaLanc" placeholder="Buscar descrição, NF, fornecedor" aria-label="Buscar lançamentos" style="flex:1 1 220px">
+    <select id="fCat" aria-label="Categoria"></select>
+    <select id="fForn" aria-label="Fornecedor"></select>
+    <label class="small"><input type="checkbox" id="fSemDoc"> só sem documento</label>
+    <button class="btn sec" id="btnCsv" type="button">Baixar CSV</button>
+  </div>
+  <div id="filtroIds" class="small" hidden></div>
+  <div class="small muted" id="resumoLanc"></div>
+  <div class="tabela"><table id="tabLanc"></table></div>
+  <button class="btn sec" id="maisLanc" type="button" hidden>Mostrar mais</button>
+</section>
+
+<section data-aba="notas" hidden>
+  <div class="cab-secao"><span class="eyebrow">Transcritas dos balancetes</span><h2>Notas explicativas da administradora</h2></div>
+  <div id="listaNotas" class="alertas"></div>
+</section>
+
+<section data-aba="conselho" hidden>
+  <div class="cab"><div class="cab-secao"><span class="eyebrow">Reunião do conselho fiscal</span><h2>Roteiro, documentos e parecer</h2></div><div class="acoes"><span class="small muted" id="periodoConselho"></span><button class="btn sec" id="btnImprimir" type="button" hidden>Imprimir relatório</button></div></div>
+  <div class="grid2">
+    <div class="card texto"><h3>Roteiro de perguntas à administradora e ao síndico</h3><p class="small muted">Gerado a partir dos alertas de prioridade alta e média do período.</p><ol id="roteiro"></ol></div>
+    <div class="card texto"><h3>Documentos a solicitar</h3><ul id="docs"></ul></div>
+  </div>
+  <div class="card texto" style="max-width:none"><h3>Minuta de parecer (para editar)</h3>
+    <p class="small muted">Texto-base montado com os números do período selecionado. A decisão de aprovar, aprovar com ressalvas ou rejeitar é do conselho.</p>
+    <div class="minuta" id="minuta" contenteditable="true" spellcheck="true"></div>
+    <div class="acoes"><button class="btn sec" id="copiarMinuta" type="button">Copiar texto</button></div>
+  </div>
+  <div class="card"><div class="cab"><div class="cab-secao"><span class="eyebrow">Documento</span><h2>Parecer do mês</h2></div></div>
+    <p class="small muted" style="margin:6px 0 12px">Gera o parecer formatado do Conselho Fiscal, com demonstrativo, despesas por categoria${''}, pontos de atenção e conclusão. O texto pode ser ajustado antes de imprimir, salvar em PDF ou baixar em Word.</p>
+    <div class="oficio-ctl"><label class="small">Mês <select id="docMes" class="sel-parecer"></select></label>
+      <label class="small">Parecer <select id="docParecerSel" class="sel-parecer"><option value="auto">Automático</option><option value="validado">Favorável</option><option value="ressalvas">Favorável com ressalvas</option><option value="analise">Em análise</option><option value="nao">Desfavorável</option></select></label>
+      <button class="btn" type="button" id="btnGerarDoc">Gerar documento</button></div></div>
+  <div id="analiseCurada"></div>
+</section>
+
+<section data-aba="administracao" hidden>
+  <div class="cab-secao"><span class="eyebrow">Acessos</span><h2>Administração</h2></div>
+
+  <div id="admSemFirebase" hidden>
+    <div class="card texto" style="max-width:none">
+      <h3>Ativar o login (uma vez só, cerca de 10 minutos)</h3>
+      <p class="small">O login usa o Firebase, serviço gratuito do Google. Com ele, os balancetes e as anotações deixam de ficar em arquivos públicos e só quem tiver usuário e senha consegue ver.</p>
+      <ol class="passos">
+        <li>Entre em <b>console.firebase.google.com</b> com uma conta Google e clique em <b>Criar um projeto</b>. Dê o nome <b>farol-conselho</b> e pode desativar o Google Analytics.</li>
+        <li>No menu à esquerda, <b>Criação → Authentication → Vamos começar</b>. Em <b>Método de login</b>, escolha <b>E-mail/senha</b>, ative a primeira chave e salve.</li>
+        <li>Ainda em Authentication, aba <b>Configurações → Domínios autorizados → Adicionar domínio</b>: <code>emersonaraujodefreitas.github.io</code></li>
+        <li><b>Criação → Firestore Database → Criar banco de dados</b>. Local: <b>southamerica-east1 (São Paulo)</b>. Modo: <b>produção</b>.</li>
+        <li>No Firestore, aba <b>Regras</b>: apague o que estiver lá, cole as regras abaixo e clique em <b>Publicar</b>.</li>
+        <li>Clique na engrenagem (<b>Configurações do projeto</b>) → em <b>Seus apps</b>, clique no ícone <b>&lt;/&gt;</b> (Web), dê o nome <b>site</b> e registre. Copie o bloco <code>const firebaseConfig = { … }</code> e cole no campo abaixo.</li>
+        <li>Clique em <b>Salvar e ativar login</b>. Em 1 a 2 minutos o site passa a pedir login; o primeiro acesso cria o administrador.</li>
+      </ol>
+      <div class="regras"><div class="cab"><b>Regras do Firestore</b><button class="btn sec" type="button" id="copiarRegras">Copiar regras</button></div><pre id="txtRegras"></pre></div>
+      <label class="small" style="display:grid;gap:6px;font-weight:600;margin-top:14px">Configuração do Firebase (firebaseConfig)
+        <textarea id="txtConfig" rows="9" class="whats-txt" spellcheck="false" placeholder="const firebaseConfig = {&#10;  apiKey: &quot;…&quot;,&#10;  authDomain: &quot;…&quot;,&#10;  projectId: &quot;…&quot;,&#10;  …&#10;};"></textarea></label>
+      <div class="acoes" style="margin-top:10px"><button class="btn" type="button" id="btnAtivarLogin">Salvar e ativar login</button><span class="small muted" id="cfgMsg"></span></div>
+      <p class="mini">Usa o token do GitHub já configurado em Importar balancetes para publicar o arquivo de configuração. Esses dados do Firebase não são secretos: a proteção vem das regras e do login.</p>
+    </div>
+  </div>
+
+  <div id="admComFirebase" hidden>
+    <div class="grid2">
+      <div class="card"><div class="cab-secao"><span class="eyebrow">Novo acesso</span><h2>Criar usuário</h2></div>
+        <form id="fNovoAcesso" class="acesso-form" style="margin-top:12px">
+          <label>Nome<input id="naNome" required></label>
+          <label>Usuário<input id="naUsuario" required autocapitalize="none" spellcheck="false" placeholder="ex.: maria.silva"></label>
+          <label>Perfil<select id="naPerfil"><option value="visualizacao">Visualização: só consulta</option><option value="conselheiro">Conselheiro: registra respostas e anotações</option><option value="admin">Administrador: tudo, inclusive criar acessos</option></select></label>
+          <button class="btn" type="submit">Criar acesso com senha provisória</button>
+        </form>
+        <div id="credencial" class="credencial" hidden></div>
+      </div>
+      <div class="card texto"><div class="cab-secao"><span class="eyebrow">Como funciona</span><h2>Senha provisória</h2></div>
+        <ul class="small">
+          <li>Ao criar o acesso, o site gera uma senha provisória. Ela aparece <b>uma única vez</b>: copie e envie à pessoa.</li>
+          <li>No primeiro acesso, a pessoa entra com a senha provisória e é obrigada a criar a própria senha.</li>
+          <li>Esqueceu a senha? Use <b>Nova senha provisória</b> na lista ao lado; a anterior deixa de funcionar.</li>
+          <li><b>Desativar</b> bloqueia a entrada na hora, sem apagar o histórico.</li>
+        </ul></div>
+    </div>
+    <div class="cab-secao"><span class="eyebrow">Usuários</span><h2>Acessos cadastrados</h2></div>
+    <div class="tabela"><table id="tabAcessos"></table></div>
+
+    <div class="card"><div class="cab-secao"><span class="eyebrow">Dados</span><h2>Base protegida</h2></div>
+      <p class="small muted" style="margin:6px 0 12px" id="migraInfo"></p>
+      <div class="acoes"><button class="btn" type="button" id="btnMigrar">Copiar balancetes e anotações para a base protegida</button>
+        <button class="btn perigo" type="button" id="btnRemoverPublicos" hidden>Remover arquivos públicos do GitHub</button></div>
+      <div id="confirmaRemover" class="acoes small" hidden>Apagar do GitHub os arquivos públicos com balancetes e anotações? A base protegida continua com tudo. <button class="btn perigo" id="simRemover" type="button">Apagar</button><button class="btn sec" id="naoRemover" type="button">Cancelar</button></div>
+      <p class="mini" id="migraMsg"></p>
+    </div>
+  </div>
+</section>
+
+<section data-aba="dados" hidden>
+  <div class="cab-secao"><span class="eyebrow">Alimentação da base</span><h2>Importar balancetes em PDF</h2></div>
+  <div class="drop" id="drop">
+    <svg width="40" height="40" viewBox="0 0 40 40" aria-hidden="true"><rect x="9" y="5" width="22" height="30" rx="3" fill="none" stroke="var(--muted)" stroke-width="2"/><path d="M20 26V14M15 19l5-5 5 5" fill="none" stroke="var(--muted)" stroke-width="2" stroke-linecap="round"/></svg>
+    <strong>Arraste os PDFs do "Demonstrativo de Receitas e Despesas" da Logo aqui</strong>
+    <span class="small muted">ou</span>
+    <label class="btn" for="arquivos">Escolher arquivos</label>
+    <input type="file" id="arquivos" accept="application/pdf,.pdf" multiple hidden>
+    <span class="small muted">Cada PDF é lido no seu navegador, conferido contra os totais do próprio balancete e guardado pelo mês de referência. Reimportar um mês substitui a versão anterior.</span>
+  </div>
+  <div class="log" id="log"></div>
+
+  <div class="card">
+    <div class="cab"><h3>Meses guardados</h3><span class="small muted" id="resumoBase"></span></div>
+    <div class="tabela" style="margin-top:10px"><table id="tabMeses"></table></div>
+  </div>
+
+  <div class="card" id="cfgGithub" style="display:grid;gap:12px">
+    <h3>Compartilhar com o conselho pelo GitHub</h3>
+    <p class="small muted">Meses importados e anotações do acompanhamento ficam guardados neste navegador. Para que apareçam para todo o conselho, preencha os campos abaixo uma única vez: a partir daí cada anotação é enviada sozinha ao repositório.</p>
+    <details class="passo-token"><summary>Como criar o token (2 minutos)</summary><ol class="small">
+      <li>No GitHub, entre em <b>Settings → Developer settings → Personal access tokens → Fine-grained tokens</b> e clique em <b>Generate new token</b>.</li>
+      <li>Em <b>Repository access</b>, escolha <b>Only select repositories</b> e marque <b>balancetefaroldeitapua</b>.</li>
+      <li>Em <b>Permissions → Repository permissions</b>, coloque <b>Contents</b> como <b>Read and write</b>.</li>
+      <li>Gere o token, copie o código que começa com <code>github_pat_</code> e cole no campo Token abaixo. Ele fica salvo só neste navegador.</li>
+    </ol></details>
+    <div class="form">
+      <label>Usuário/organização<input type="text" id="ghOwner" autocomplete="off"></label>
+      <label>Repositório<input type="text" id="ghRepo" autocomplete="off"></label>
+      <label>Branch<input type="text" id="ghBranch" autocomplete="off" placeholder="main"></label>
+      <label>Token<input type="password" id="ghToken" autocomplete="off" placeholder="github_pat_…"></label>
+    </div>
+    <div class="acoes">
+      <button class="btn" id="btnPublicar" type="button">Publicar base no GitHub</button>
+      <button class="btn sec" id="btnExportar" type="button">Baixar base (JSON)</button>
+      <label class="btn sec" for="importJson">Carregar base (JSON)</label>
+      <input type="file" id="importJson" accept="application/json,.json" hidden>
+      <button class="btn perigo" id="btnLimpar" type="button">Descartar meses não publicados</button>
+    </div>
+    <div id="confirmaLimpar" class="acoes small" hidden>Descartar os meses importados só neste navegador? <button class="btn perigo" id="simLimpar" type="button">Descartar</button><button class="btn sec" id="naoLimpar" type="button">Cancelar</button></div>
+  </div>
+</section>
+
+</div></main>
+<footer class="rodape"><div class="wrap">
+  <span>Fonte: Demonstrativos de Receitas e Despesas emitidos pela Logo Gestão Condominial. <span id="rodapeBase"></span></span>
+  <span>Documento de apoio ao Conselho Fiscal. Não substitui a análise contábil nem a conferência dos extratos bancários.</span>
+</div></footer>
+</div></div>
+<div class="acesso" id="trocaPropria" hidden style="background:rgba(4,40,63,.72)">
+  <form class="acesso-caixa acesso-form" id="fTrocaPropria">
+    <h1>Alterar minha senha</h1>
+    <label>Senha atual<input id="tpAtual" type="password" autocomplete="current-password" required></label>
+    <label>Nova senha<input id="tpNova" type="password" autocomplete="new-password" required minlength="8"></label>
+    <label>Repita a nova senha<input id="tpRepete" type="password" autocomplete="new-password" required minlength="8"></label>
+    <p class="acesso-msg" id="tpMsg" hidden></p>
+    <button class="btn" type="submit">Salvar</button>
+    <button class="btn sec" type="button" id="tpCancelar">Cancelar</button>
+  </form>
+</div>
+<div class="acesso" id="avisoVenc" hidden style="background:rgba(4,40,63,.72)">
+  <div class="acesso-caixa aviso-caixa" role="alertdialog" aria-labelledby="avisoTitulo">
+    <span class="eyebrow" style="color:var(--farol)">Prazo vencido</span>
+    <h1 id="avisoTitulo" style="margin:0;font-size:1.25rem"></h1>
+    <p class="small" style="margin:0">A administradora não respondeu no prazo combinado. Vale cobrar a resposta.</p>
+    <ul class="lista-pend" id="avisoLista"></ul>
+    <div class="acoes"><button class="btn" type="button" id="avisoIr">Ver pendências</button><button class="btn sec" type="button" id="avisoFechar">Fechar</button></div>
+  </div>
+</div>
+<div class="doc-overlay" id="docParecer" hidden>
+  <div class="doc-barra"><b>Parecer do Conselho Fiscal</b><span class="small">Clique no texto para ajustar antes de imprimir.</span>
+    <div class="acoes"><button class="btn" type="button" id="docImprimir">Imprimir / salvar PDF</button><button class="btn sec" type="button" id="docWord">Baixar Word</button><button class="btn sec" type="button" id="docFechar">Fechar</button></div></div>
+  <div class="doc-area"><article class="folha" id="folha" contenteditable="true" spellcheck="true" tabindex="-1"></article></div>
+</div>
+<datalist id="listaResp"><option value="Síndico"><option value="Administradora"><option value="Conselho fiscal"><option value="Assembleia"></datalist>
+<div class="toast" id="toast" hidden></div>
+<div class="tip" id="tip" hidden></div>
+<script src="js/firebase-config.js" onerror="void 0"></script>
+<script src="js/base.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>
