@@ -89,12 +89,14 @@ export async function textoDoArquivo(pdfjs, arquivo, progresso = () => {}) {
 }
 
 // fornecedor dos balancetes com mais palavras em comum com o nome do contratado
-const VAZIAS = new Set(["sociedade", "individual", "ltda", "eireli", "servicos", "servico", "de", "da", "do", "das", "dos", "e", "me", "epp", "sa", "s/a", "comercio", "empresa", "cia", "companhia", "advogados", "associados"]);
+const VAZIAS = new Set(["sociedade", "individual", "ltda", "eireli", "servicos", "servico", "de", "da", "do", "das", "dos", "e", "me", "epp", "sa", "s/a", "comercio", "empresa", "cia", "companhia", "advogados", "associados",
+  "tecnologia", "seguranca", "eletronica", "eletrica", "solucoes", "gestao", "engenharia", "construcoes", "construtora", "manutencao", "industria", "telecom", "telecomunicacoes", "sistemas", "brasil", "bahia", "grupo", "geral", "gerais"]);
 export function casarFornecedor(nome, forns) {
   const tk = (s) => ctNorm(s).replace(/[^a-z0-9 ]/g, " ").split(/\s+/).filter((w) => w.length >= 3 && !VAZIAS.has(w));
+  // nota: palavras distintivas em comum (desempate pela proporção do nome do fornecedor)
   const a = new Set(tk(nome)); let melhor = null, nota = 0;
-  for (const f of forns) { const b = tk(f.replace(/\(.*?\)/g, "")); const n = b.filter((w) => a.has(w)).length / Math.max(1, b.length); if (n > nota) { nota = n; melhor = f; } }
-  return nota >= 0.5 ? melhor : null;
+  for (const f of forns) { const b = tk(f.replace(/\(.*?\)/g, "")); if (!b.length) continue; const k = b.filter((w) => a.has(w)).length, r = k / b.length; if (r >= 0.5 && k + r > nota) { nota = k + r; melhor = f; } }
+  return melhor;
 }
 
 // trechos mostrados na revisão nunca exibem CPF ou RG das partes
@@ -118,7 +120,8 @@ const PAPEL_CONTRATADO = "contratad[oa]|prestador[a]?|locador[a]?|seguradora|for
 const PAPEL_CONTRATANTE = "contratante|locatari[oa]|segurado|assinante|tomador[a]?|comprador[a]?|outorgante";
 const SUFIXO_EMP = /\b(ltda|s\.?\s?a\.?|eireli|me|epp|s\/s|sociedade|advocacia|advogados|seguros|servicos|telecom\w*|engenharia|construc\w+)\b/i;
 const TIPOS_CT = [
-  [/portaria|controle de acesso|vigilancia|seguranca patrimonial/, "Portaria e segurança"], [/limpeza|conservacao|asseio/, "Limpeza e conservação"],
+  [/portaria|controle de acesso|vigilancia|seguranca patrimonial/, "Portaria e segurança"], [/elevador/, "Manutenção de elevadores"],
+  [/seguranca eletronica|eletrica|eletronic|cftv|camera|interfon|portao|alarme|cerca eletrica/, "Manutenção elétrica e eletrônica"], [/limpeza|asseio/, "Limpeza e conservação"],
   [/elevador/, "Manutenção de elevadores"], [/apolice|seguro|segurad/, "Seguro"], [/internet|banda larga|comunicacao multimidia|fibra|telefon/, "Internet e telefonia"],
   [/empreitada|reforma|obra|fachada|pintura|impermeabiliza/, "Obra e reforma"], [/assessoria juridica|advocac|honorarios advocaticios/, "Assessoria jurídica"],
   [/administracao condominial|gestao condominial|administradora/, "Administração condominial"], [/bomba|piscina|jardin|dedetiza|portao|cftv|camera|interfon|gerador|incendio/, "Manutenção predial"],
@@ -131,15 +134,15 @@ export function lerContrato(textoBruto, forns = []) {
   const C = { adicionais: [], info: [] }, T = {};
   const um = (re, alvo = n) => { re.lastIndex = 0; return re.exec(alvo); };
   const todos = (re, alvo = n) => [...alvo.matchAll(re)];
-  const frase = (i) => { let a = n.lastIndexOf(". ", i), b = n.indexOf(". ", i); a = a < 0 ? 0 : a + 2; b = b < 0 ? n.length : b + 1; return t.slice(a, Math.min(b, a + 420)).trim(); };
-  const info = (rot, txt, i) => { if (txt && !C.info.some((x) => x.rot === rot && x.txt === txt)) C.info.push({ rot, txt: txt.length > 300 ? txt.slice(0, 297) + "…" : txt }); if (i !== undefined && !T[rot]) T[rot] = trecho(t, i, 0, 100); };
+  // frase em volta de i (limitada, porque o OCR às vezes não tem pontos)
+  const frase = (i) => { let a = n.lastIndexOf(". ", i), b = n.indexOf(". ", i); a = Math.max(a < 0 ? 0 : a + 2, i - 200); b = Math.min(b < 0 ? n.length : b + 1, i + 260); const sep = n.slice(a, i).search(/(?:paragrafo \w+|clausula \w+|[a-z]\))\s/); return ocultar(t.slice(sep > 0 ? a + sep : a, b).trim()); };
+  const info = (rot, txt, i) => { txt = txt && ocultar(txt); if (txt && !C.info.some((x) => x.rot === rot && x.txt === txt)) C.info.push({ rot, txt: txt.length > 300 ? txt.slice(0, 297) + "…" : txt }); if (i !== undefined && !T[rot]) T[rot] = trecho(t, i, 0, 100); };
 
   // ---- tipo do contrato (pelo título e pelo objeto)
-  const cab = n.slice(0, 1500);
-  for (const [re, nome] of TIPOS_CT) if (re.test(cab)) { C.tipo = nome; break; }
+  for (const trecho0 of [n.slice(0, 400), n.slice(0, 1800)]) { for (const [re, nome] of TIPOS_CT) if (re.test(trecho0)) { C.tipo = nome; break; } if (C.tipo) break; }
 
   // ---- número
-  const ehDoc = (i) => /(cnpj|cpf|rg|oab|cep|inscri|identidade)[^\d]{0,25}$/.test(n.slice(Math.max(0, i - 40), i)) || /^\d{2}\.?\d{3}\.?\d{3}\/?\d{4}/.test(n.slice(i));
+  const ehDoc = (i) => /(cnpj|cpf|rg|oab|cep|inscri|identidade|lei|decreto|artigo|art\.|resolucao|norma|nbr)[^\d]{0,25}$/.test(n.slice(Math.max(0, i - 40), i)) || /^\d{2}\.?\d{3}\.?\d{3}\/?\d{4}/.test(n.slice(i));
   let m = [...n.matchAll(/(?:contrato|apolice|proposta|termo|ordem de servico)[^.]{0,40}?\bn[ºo°.]*\s*:?\s*(\d[\d./-]*\d|\d)/gi), ...n.matchAll(/\bn[ºo°]\s*:?\s*(\d[\d./-]{2,}\d)/g)].find((x) => !ehDoc(x.index + x[0].length - x[1].length));
   if (m) { C.numero = t.slice(m.index, m.index + m[0].length).match(/(\d[\d./-]*\d|\d)\s*$/)[1]; T.numero = trecho(t, m.index, m[0].length, 40); }
 
@@ -150,8 +153,10 @@ export function lerContrato(textoBruto, forns = []) {
   for (const x of todos(new RegExp(`\\b(${PAPEL_CONTRATADO})\\s*:\\s*([^;]{3,160}?)(?=,|;|\\s-\\s|\\s+cnpj|\\s+inscrit|\\s+com sede|$)`, "gi"), t)) candidatos.push({ nome: nomeLimpo(x[2]), i: x.index, peso: 3 });
   // "NOME, ... doravante denominada CONTRATADA"
   for (const x of todos(new RegExp(`(?:doravante|adiante|simplesmente)\\s+(?:simplesmente\\s+)?(?:denominad[oa]s?|designad[oa]s?|chamad[oa]s?)?\\s*(?:simplesmente\\s+)?(?:a|o)?\\s*(?:${PAPEL_CONTRATADO})\\b`, "gi"))) {
-    const antes = t.slice(Math.max(0, x.index - 420), x.index);
-    const corte = Math.max(antes.search(/de outro lado,?|e,? de outro,?|e de outro lado,?|e a empresa|e o escritorio|outro lado,? a empresa/i) >= 0 ? antes.toLowerCase().lastIndexOf("outro") : -1, antes.lastIndexOf(" e a "), antes.lastIndexOf("CONTRATANTE"));
+    const antes = t.slice(Math.max(0, x.index - 520), x.index);
+    const emp = [...antes.matchAll(/(?:a empresa|empresa|o escrit[oó]rio)\s+([^,;]{3,120})/gi)].at(-1) || [...antes.matchAll(/([A-ZÀ-Ú][A-Za-zÀ-ú0-9&.\- ]{2,90}?\b(?:LTDA|Ltda|S\.?\s?A\.?|EIRELI|Eireli|EPP)\b\.?)/g)].at(-1);
+    if (emp && !/condom/i.test(emp[1])) { candidatos.push({ nome: nomeLimpo(emp[1]), i: x.index, peso: 2.5 }); continue; }
+    const corte = Math.max(antes.search(/de outro lado,?|do outro lado,?|por outro lado,?|e,? de outro,?|e de outro lado,?|e a empresa|e o escritorio|outro lado,? a empresa/i) >= 0 ? antes.toLowerCase().lastIndexOf("outro") : -1, antes.lastIndexOf(" e a "), antes.lastIndexOf("CONTRATANTE"));
     const seg = antes.slice(corte >= 0 ? corte : 0).replace(/^(outro|contratante)[^,a-z]*,?\s*(de outro lado,?|lado,?)?\s*/i, "").replace(/^(a empresa|o escrit[oó]rio|a|o)\s+/i, "");
     const nm = nomeLimpo(seg.split(",")[0]);
     if (nm.length > 3) candidatos.push({ nome: nm, i: x.index, peso: 2 });
@@ -161,7 +166,7 @@ export function lerContrato(textoBruto, forns = []) {
     const nm = nomeLimpo(x[1].split(/\s[-–]\s/).at(-1));
     if (!/condom|corretor/i.test(nm)) candidatos.push({ nome: nm, i: x.index, peso: 1 });
   }
-  const validos = candidatos.filter((c) => c.nome && !/condom[ií]nio|^contratante|^segurado|^assinante/i.test(c.nome) && c.nome.length <= 120);
+  const validos = candidatos.filter((c) => c.nome && !/condom[ií]nio|^contratante|^segurado|^assinante|^sr\.?\s|^sra\.?\s|^neste ato|^representad/i.test(c.nome) && c.nome.length <= 120);
   validos.sort((a, b) => b.peso - a.peso || a.i - b.i);
   if (validos[0]) { C.contratado = validos[0].nome.replace(/\s+/g, " "); T.contratado = trecho(t, validos[0].i, 0, 80); C._iContratado = validos[0].i; }
   m = um(new RegExp(`\\b(?:${PAPEL_CONTRATANTE})\\s*:\\s*([^,;]{3,120})`, "i"), t); if (m) C.contratante = nomeLimpo(m[1].split(/\.\s|\s+(?:vig[eê]ncia|plano|contratad|cnpj|cpf|endere)/i)[0]);
@@ -174,11 +179,11 @@ export function lerContrato(textoBruto, forns = []) {
   if (!C.forn) for (const f of forns) if (casarFornecedor(f, [C.contratado || ""]) || (n.slice(0, 2500).includes(ctNorm(f).replace(/\s*\(.*\)/, "")) && f.length > 6)) { C.forn = f; break; }
 
   // ---- objeto
-  m = um(/tem\s+(?:por|como)\s+objet(?:o|ivo)\s+(?:a\s+|o\s+)?(.{12,300}?)(?:\.\s|;|$)/) || um(/\bobjeto\s*[:.\-–]\s*(?:\d+(?:\.\d+)*\.?\s*)?(?:o presente contrato tem por objeto\s*)?(.{12,300}?)(?:\.\s|;|$)/) || um(/\bplano\s*:\s*(.{5,160}?)(?:\s+mensalidade|\.\s|;|$)/) || um(/fornecera\s+(.{12,240}?)(?:\.\s|;|$)/);
+  m = um(/tem\s+(?:por|como)\s+objet(?:o|ivo)\s+(?:a\s+|o\s+)?(.{12,300}?)(?:\.\s|;|$)/) || um(/(?:se compromete|se obriga)\s+a\s+(?:executar|prestar|realizar|fornecer)\s+(?:os\s+)?(.{12,260}?)(?:,?\s*objeto deste|\.\s|;|$)/) || um(/\bobjeto\s*[:.\-–]\s*(?:\d+(?:\.\d+)*\.?\s*)?(?:o presente contrato tem por objeto\s*)?(.{12,300}?)(?:\.\s|;|$)/) || um(/\bplano\s*:\s*(.{5,160}?)(?:\s+mensalidade|\.\s|;|$)/) || um(/fornecera\s+(.{12,240}?)(?:\.\s|;|$)/);
   if (m) { C.objeto = t.substr(m.index + m[0].indexOf(m[1]), m[1].length).trim(); T.objeto = trecho(t, m.index, m[0].length, 10); }
   else { m = um(/(?:contrato|apolice|termo de adesao)[^.]{0,30}?\bde\s+(.{10,140}?)(?=\s+(?:n[ºo°]|contratante|contratad|pelo presente|que entre si|de um lado|segurado|cl[aá]usula|\d+\.|$))/); if (m) C.objeto = t.substr(m.index + m[0].indexOf(m[1]), m[1].length).trim(); }
   if (C.tipo === "Seguro" && (!C.objeto || /ltda|s\.a|seguros/i.test(C.objeto))) C.objeto = `Seguro do condomínio${C.numero ? ` (apólice ${C.numero})` : ""}`;
-  if (C.objeto) { C.objeto = C.objeto.replace(/^(?:a|o)\s+(?:contratad[oa]|prestador[a]?|empresa)\s+(?:fornecer[aá]|prestar[aá]|executar[aá]|realizar[aá]|disponibilizar[aá])\s+/i, "").replace(/,\s*(conforme|o qual|nos termos).*$/i, "").replace(/^(a|o)\s+(prestacao|prestação)/i, "Prestação"); if (C.objeto.length > 160) C.objeto = C.objeto.slice(0, 157).replace(/\s\S*$/, "") + "…"; }
+  if (C.objeto) { C.objeto = C.objeto.replace(/\s+pelo (?:o )?presente.*$/i, "").replace(/^(?:a|o)\s+(?:contratad[oa]|prestador[a]?|empresa)\s+(?:fornecer[aá]|prestar[aá]|executar[aá]|realizar[aá]|disponibilizar[aá])\s+/i, "").replace(/,\s*(conforme|o qual|nos termos).*$/i, "").replace(/^(a|o)\s+(prestacao|prestação)/i, "Prestação"); if (C.objeto.length > 160) C.objeto = C.objeto.slice(0, 157).replace(/\s\S*$/, "") + "…"; }
   if (!C.tipo && C.objeto) for (const [re, nome] of TIPOS_CT) if (re.test(ctNorm(C.objeto))) { C.tipo = nome; break; }
 
   // ---- valores
@@ -191,7 +196,7 @@ export function lerContrato(textoBruto, forns = []) {
   const ehMulta = (x) => /multa|penalidade|juros|caucao|retenc/.test(x.antes.slice(-50));
   let principal = null;
   const parc = valores.find((x) => !ehLimite(x) && /(\d{1,3})\s*(?:\([^)]*\))?\s*(?:parcelas|prestacoes|vezes)[^#]{0,40}?(?:mensais|iguais|de)?[^#]{0,12}$/.test(x.antes));
-  const mensal = valores.find((x) => !ehLimite(x) && !ehAvulso(x) && !ehMulta(x) && x !== parc && (/(mensal|mensais|mensalidade|por mes|ao mes|cada mes|mensalmente)\b/.test(x.antes.slice(-70)) || /^\s*(?:\([^)]*\)\s*)?(?:mensais|mensal|por mes|ao mes|mensalmente)/.test(x.depois)));
+  const mensal = valores.find((x) => !ehLimite(x) && !ehAvulso(x) && !ehMulta(x) && x !== parc && (/(mensal|mensais|mensalidade|por mes|ao mes|cada mes|mensalmente)\b/.test(x.antes.slice(-70)) || /^\s*(?:\([^)]*\)\s*)?,?\s*(?:a ser\s+|que sera\s+)?(?:pag[oa]s?|devid[oa]s?|cobrad[oa]s?|faturad[oa]s?)?\s*(?:mensais|mensal|por mes|ao mes|mensalmente)/.test(x.depois)));
   const glob = valores.find((x) => !ehLimite(x) && /(valor|preco|importancia|premio)\s+(global|total)|valor do contrato|valor da obra|total de\s*$|premio\s*(liquido)?\s*:?\s*$/.test(x.antes.slice(-60)));
   const anual = valores.find((x) => !ehLimite(x) && (/\banual\b|por ano|ao ano/.test(x.antes.slice(-50)) || /^\s*(?:\([^)]*\)\s*)?(?:anuais|por ano|ao ano)/.test(x.depois)));
   if (mensal) { C.modalidade = "mensal"; C.valor = mensal.v; principal = mensal; }
@@ -228,30 +233,34 @@ export function lerContrato(textoBruto, forns = []) {
   m = um(new RegExp(`(?:\\ba\\b|\\bate\\b|\\bas 24h de|\\bas 24 horas de|termino em|encerrando-se em|com termino em)\\s+(?:o dia\\s+)?${DATA_RE}`));
   if (m && /vigen|vigor|prazo|termino|24h|24 horas|periodo/.test(n.slice(Math.max(0, m.index - 140), m.index + 20))) { C.fim = lerData(m[1]); T.fim = trecho(t, m.index, m[0].length, 60); }
   // prazo de vigência (ignora prazos de garantia, pagamento e atendimento)
-  m = todos(new RegExp(`(?:vigorara|vigera|vigorar|vigencia|vigente|prazo de vigencia|prazo inicial|prazo determinado|pelo prazo de|pelo periodo de|periodo de|permanencia minima|fidelidade)[^.]{0,50}?(?:de|por|em)?\\s*${NUM}\\s*(meses|mes|anos?|dias)\\b`, "g"))
-    .find((x) => !/garant|pagamento|atendiment|reparo|aviso|antecedencia|apos/.test(n.slice(Math.max(0, x.index - 90), x.index + x[0].length)));
+  m = todos(new RegExp(`(?:vigorara|vigera|vigorar|vigencia|vigente|prazo de vigencia|prazo inicial|prazo determinado|pelo prazo de|pelo periodo de|periodo de|permanencia minima|fidelidade|contrato tera (?:o seu |um )?prazo de|seu prazo de|prazo contratual de)[^.]{0,50}?(?:de|por|em)?\\s*${NUM}\\s*(meses|mes|anos?|dias)\\b`, "g"))
+    .find((x) => !/garant|pagamento|atendiment|reparo|aviso|antecedencia|apos|solicitac|chamado|uteis|interregno|repactua/.test(n.slice(Math.max(0, x.index - 90), x.index + x[0].length)));
   if (m) { const q = +m[1], u = m[2]; C.prazoMeses = /ano/.test(u) ? q * 12 : /dia/.test(u) ? null : q; if (/dia/.test(u)) C.prazoDias = q; T.prazo = trecho(t, m.index, m[0].length, 40); }
   m = um(new RegExp(`(?:concluid[oa]s?|executad[oa]s?|entregue|prazo de execucao|prazo para conclusao)[^.]{0,40}?(?:em|de)\\s+${NUM}\\s*(dias|meses)`));
   if (m) { info("Prazo de execução", `${m[1]} ${m[2]}${/corrid/.test(n.slice(m.index, m.index + m[0].length + 20)) ? " corridos" : ""}`, m.index); if (!C.prazoMeses && !C.prazoDias) { if (/dia/.test(m[2])) C.prazoDias = +m[1]; else C.prazoMeses = +m[1]; } }
-  if (!C.inicio) { const as = todos(/,\s*(\d{1,2})[ºo°]?\s+de\s+([a-zç]+)\s+de\s+(\d{4})/g).filter((x) => MESES_N[x[2]]); const a = as.at(-1) || as[0]; if (a) { C.inicio = ctIso(a[1], MESES_N[a[2]], a[3]); T.inicio = trecho(t, a.index, a[0].length, 30) + " (data de assinatura)"; } }
+  const assinRe = /[a-z]{3,},\s*(\d{1,2})[ºo°]?\s+de\s+([a-zç]+)\s*[—–-]?\s*de\s+(\d{4})/g;
+  if (!C.inicio) { const as = todos(assinRe).filter((x) => MESES_N[x[2]]); const a = as.at(-1); if (a) { C.inicio = ctIso(a[1], MESES_N[a[2]], a[3]); T.inicio = trecho(t, a.index, a[0].length, 30) + " (data de assinatura)"; } }
   if (!C.fim && C.inicio && C.prazoDias) C.fim = somaDiasIso(C.inicio, C.prazoDias);
   C.indeterminado = /prazo indeterminado|tempo indeterminado/.test(n);
   C.renovacaoAuto = /renova(?:ndo|-se|do|da|cao|ra)?[^.]{0,30}automatica|renovacao automatica|prorroga(?:ndo|-se|do|da|cao)?[^.]{0,30}automatica|automaticamente (?:renovad|prorrogad)/.test(n);
   m = um(new RegExp(`(?:fidelidade|permanencia minima)[^.]{0,40}?${NUM}\\s*(meses|anos?)`)); if (m) info("Fidelidade", `${m[1]} ${m[2]}`, m.index);
-  m = um(/assinatura[^.]{0,30}?(\d{1,2}[\/.]\d{1,2}[\/.]\d{4})/); const assin = m ? lerData(m[1]) : (() => { const as = todos(/,\s*(\d{1,2})[ºo°]?\s+de\s+([a-zç]+)\s+de\s+(\d{4})\s*\.?/g).filter((x) => MESES_N[x[2]]); const a = as.at(-1); return a ? ctIso(a[1], MESES_N[a[2]], a[3]) : ""; })();
+  m = um(/assinatura[^.]{0,30}?(\d{1,2}[\/.]\d{1,2}[\/.]\d{4})/); const assin = m ? lerData(m[1]) : (() => { const as = todos(assinRe).filter((x) => MESES_N[x[2]]); const a = as.at(-1); return a ? ctIso(a[1], MESES_N[a[2]], a[3]) : ""; })();
   if (assin) C.assinatura = assin;
 
   // ---- rescisão, aviso prévio e multas
-  m = um(new RegExp(`(?:aviso previo|antecedencia(?: minima)?|antecedente|comunicacao previa|denunciad[oa][^.]{0,40}?com)[^.]{0,40}?${NUM}\\s*dias`)) || um(new RegExp(`${NUM}\\s*dias de antecedencia`));
+  const avisos = [...todos(new RegExp(`(?:aviso previo|antecedencia(?: minima)?|antecedente|comunicacao previa|denunciad[oa][^.]{0,40}?com)[^.]{0,40}?${NUM}\\s*dias`, "g")), ...todos(new RegExp(`${NUM}\\s*dias(?: corridos)? de antecedencia`, "g"))]
+    .filter((x) => !/uteis|nota fiscal|pagamento|fatura|emissao/.test(n.slice(Math.max(0, x.index - 60), x.index + x[0].length + 40)));
+  m = avisos.find((x) => /aviso previo|rescis|resili|renova|denunc|nao mais contratar/.test(n.slice(Math.max(0, x.index - 160), x.index + 80))) || avisos[0];
   if (m) { C.avisoDias = +m[1]; T.aviso = trecho(t, m.index, m[0].length, 50); }
   const F = "(?:[^.]|\\.(?=\\d))*";
-  for (const x of todos(new RegExp(`${F}\\b(?:rescis|rescind|cancelament|rompiment|denuncia)${F}\\bmulta${F}\\.|${F}\\bmulta${F}\\b(?:rescis|cancelament|fidelidade)${F}\\.`, "g"))) { const f2 = t.substr(x.index, x[0].length).trim(); C.multaRescisoria = f2.length > 260 ? f2.slice(0, 257) + "…" : f2; break; }
-  m = um(/atraso no pagamento[^.]{0,120}?multa\s+(?:moratoria\s+)?(?:de\s+)?(\d{1,2}(?:,\d+)?)\s*%/) || todos(/multa\s+(?:moratoria\s+)?(?:de\s+)?(\d{1,2}(?:,\d+)?)\s*%[^.]{0,80}?(?:atraso|inadimpl|vencimento)/g).find((x) => !/por dia de atraso|entrega|execucao|conclusao/.test(x[0])) || um(/(?:nao cumprimento|inadimplemento)[^.]{0,120}?multa\s+de\s+(\d{1,2}(?:,\d+)?)\s*%/);
+  for (const x of todos(/multa/g)) { const f2 = frase(x.index), fn = ctNorm(f2); if (/rescis|rescind|cancelament|rompiment|resili|infrac|infrator|descumpr|fidelidade/.test(fn) && !/atraso no (pagamento|recebimento)|juros/.test(fn) && f2.length < 470) { C.multaRescisoria = f2.replace(/^[a-z]\)\s*/i, ""); break; } }
+  m = um(/atraso no (?:pagamento|recebimento)[^.]{0,160}?multa\s+(?:moratoria\s+)?(?:de\s+)?(\d{1,2}(?:,\d+)?)\s*%/) || todos(/multa\s+(?:moratoria\s+)?(?:de\s+)?(\d{1,2}(?:,\d+)?)\s*%[^.]{0,80}?(?:atraso|inadimpl|vencimento)/g).find((x) => !/por dia de atraso|entrega|execucao|conclusao/.test(x[0])) || um(/(?:nao cumprimento|inadimplemento)[^.]{0,120}?multa\s+de\s+(\d{1,2}(?:,\d+)?)\s*%/);
   if (m) { const j = /juros\s+(?:de\s+)?(\d{1,2}(?:,\d+)?)\s*%/.exec(n.slice(m.index, m.index + 220)); C.multa = `${m[1]}%${j ? ` + juros de ${j[1]}% ao mês` : ""}`; }
   m = um(/multa\s+de\s+(\d{1,2}(?:,\d+)?)\s*%[^.]{0,40}?por dia de atraso[^.]*/); if (m) info("Multa por atraso na execução", t.substr(m.index, m[0].length).trim(), m.index);
 
   // ---- reajuste
-  const ri = n.search(/reajust|corrigid[oa]|atualizad[oa] (?:anualmente|monetariamente)|correcao monetaria/);
+  const ocRe = todos(/reajust|corrigid[oa]|atualizad[oa] (?:anualmente|monetariamente)|correcao monetaria/g).map((x) => x.index);
+  const ri = ocRe.find((i) => /igp|ipca|inpc|ipc-|salario.minimo|convencao coletiva|dissidio/.test(n.slice(Math.max(0, i - 200), i + 260)) && !/atraso|mora\b|juros/.test(n.slice(Math.max(0, i - 120), i + 60))) ?? (ocRe[0] ?? -1);
   if (ri >= 0) {
     const jan = n.slice(Math.max(0, ri - 200), ri + 260), idx = [];
     for (const [re, nome] of [[/igp-?\s?m/, "IGP-M"], [/ipca/, "IPCA"], [/inpc/, "INPC"], [/igp-?\s?di/, "IGP-DI"], [/ipc-?\s?fipe/, "IPC-Fipe"], [/salario[- ]minimo/, "salário mínimo"], [/convencao coletiva|dissidio|acordo coletivo/, "convenção coletiva"]]) if (re.test(jan)) idx.push(nome);
@@ -266,7 +275,9 @@ export function lerContrato(textoBruto, forns = []) {
   const ret = []; for (const x of todos(new RegExp(`${F}\\b(?:retenc\\w*|retid[oa])${F}\\.`, "g"))) { const f2 = ctNorm(x[0]); const p = /(\d{1,2}(?:,\d+)?)\s*%/.exec(f2); const imp = ["inss", "iss", "irrf", "ir ", "pis", "cofins", "csll", "caucao"].filter((k) => f2.includes(k)).map((k) => k.trim().toUpperCase().replace("CAUCAO", "caução")); if (p || imp.length) ret.push(`${p ? p[1] + "% " : ""}${imp.join(", ")}`.trim()); }
   if (ret.length) info("Retenções", [...new Set(ret)].join("; "));
   const sla = []; for (const x of todos(new RegExp(`((?:chamados?|atendiment\\w*|atendid\\w*|reparo|substitu\\w*|reposicao|emergenc\\w*)[^.]{0,70}?em ate\\s+${NUM}\\s*(horas?|minutos|dias))`, "g"))) sla.push(t.substr(x.index, x[1].length).trim());
+  for (const x of todos(new RegExp(`((?:prazo para atendimento|natureza (?:nao[- ])?emergencial|servicos? emergencia\\w*)[^.]{0,90}?(?:em|de|no prazo de) ate\\s+${NUM}\\s*(horas?|minutos|dias)(?: uteis| corridos)?)`, "g"))) { const f2 = t.substr(x.index, x[1].length).trim(); if (!sla.includes(f2)) sla.push(f2); }
   if (sla.length) info("Prazos de atendimento", sla.slice(0, 4).join("; "));
+  m = um(/visitas?\s+(mensa(?:l|is)|semana(?:l|is)|quinzena(?:l|is)|bimestra(?:l|is)|trimestra(?:l|is)|diarias?)[^.]{0,80}/); if (m) info("Visitas", t.substr(m.index, m[0].length).trim());
   const qt = [];
   for (const x of todos(new RegExp(`${NUM}\\s*(postos? de trabalho|postos?|auxiliares?[a-z ]{0,20}|porteiros?|vigilantes?|zeladores?|funcionarios?|empregados?|colaboradores?|elevadores?|bombas?|portoes|cameras?|jardineiros?)`, "g"))) qt.push(`${x[1]} ${t.substr(x.index + x[0].length - x[2].length, x[2].length).trim()}`);
   const esc = /(\d{1,2}\s?x\s?\d{2})/.exec(n); if (esc) qt.push(`escala ${esc[1].replace(/\s/g, "")}`);
@@ -274,7 +285,7 @@ export function lerContrato(textoBruto, forns = []) {
   const dias = /de segunda a (sexta|sabado|domingo)/.exec(n); if (dias) qt.push(`de segunda a ${dias[1].replace("sabado", "sábado")}`);
   if (/portaria 24|24 horas por dia|24h por dia|vinte e quatro\) horas por dia|ininterrupt/.test(n)) qt.push("24 horas por dia");
   if (qt.length) info("Quantidades e horários", [...new Set(qt)].join("; "));
-  const exc = []; for (const x of todos(new RegExp(`${F}\\b(?:nao (?:estao |esta )?inclu\\w*|nao inclui|excluid\\w*|por conta d[oa] contratante|correm por conta d[oa] contratante|orcad[oa]s? a parte|cobrad[oa]s? a parte)${F}\\.`, "g"))) exc.push(t.substr(x.index, x[0].length).trim());
+  const exc = []; for (const x of todos(/nao (?:estao |esta )?inclu\w*|nao inclui|por conta d[oa] contratante|correm por conta d[oa] contratante|orcad[oa]s? a parte|cobrad[oa]s? a parte|nao estao inclusos/g)) { const f2 = frase(x.index); if (f2.length <= 420 && !exc.includes(f2)) exc.push(f2.replace(/^par[aá]grafo \w+\s*/i, "")); }
   if (exc.length) info("Não incluído / por conta do condomínio", exc.slice(0, 3).join(" "));
   const incl = /incluindo ([^.;]{4,120})/.exec(n); if (incl) info("Incluído", t.substr(incl.index + 10, incl[1].length).trim());
   if (/encargos trabalhistas|obrigacoes trabalhistas/.test(n)) info("Encargos trabalhistas", "Responsabilidade da contratada, conforme o contrato.");
