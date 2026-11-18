@@ -546,7 +546,7 @@ b.neg, td.neg { color: #b4231a; } td.pos { color: #1d7a4b; }
 .ag-txt { display: grid; gap: 2px; } .ag-quando { font-size: .85rem; color: var(--muted); white-space: nowrap; display: flex; align-items: center; gap: 6px; }
 .chips { display: flex; flex-wrap: wrap; gap: 2px; max-width: 170px; margin: 0 0 3px auto; }
 .chip { width: 9px; height: 14px; border-radius: 2px; background: #cfd8e0; }
-.chip.ok { background: #2a9d8f; } .chip.dif { background: #e0a100; } .chip.ausente { background: #d9663a; }
+.chip.ok, .chip.pago { background: #2a9d8f; } .chip.nada { background: #e3e9ef; } .chip.dif { background: #e0a100; } .chip.ausente { background: #d9663a; }
 .grupo-av { list-style: none; font-size: .78rem; font-weight: 800; text-transform: uppercase; letter-spacing: .05em; color: var(--brand); padding: 6px 0 0 !important; border: 0 !important; background: none !important; }
 #cardProposta input, #cardFundo input { font: inherit; border: 1px solid var(--line-2); border-radius: 6px; padding: 6px 8px; }
 @media (max-width: 700px) { .link-add { grid-template-columns: minmax(0, 1fr); } .ag { grid-template-columns: 48px minmax(0, 1fr); } .ag-quando { grid-column: 2; } }
@@ -565,6 +565,7 @@ b.neg, td.neg { color: #b4231a; } td.pos { color: #1d7a4b; }
 .ficha-dados dd { margin: 2px 0 0; color: var(--ink); }
 .nf-tag { display: inline-block; margin: 2px 4px 2px 0; padding: 2px 8px; border-radius: 4px; background: #eef3f7; font-size: .82rem; white-space: nowrap; }
 .perguntas-ct { display: grid; gap: 8px; padding-left: 20px; margin: 8px 0 12px; }
+.clausulas-ct { margin-top: 12px; } .clausulas-ct summary { cursor: pointer; font-weight: 700; color: var(--accent); } .clausulas-ct ol { columns: 2; column-gap: 28px; font-size: .9rem; padding-left: 22px; } @media (max-width: 760px) { .clausulas-ct ol { columns: 1; } }
 .ficha-ct h3 { margin: 2px 0 0; font-size: 1.05rem; color: var(--ink); }
 </style>
 </head>

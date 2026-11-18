@@ -2,7 +2,7 @@ import { lerBalancete, conferir } from "./parser.mjs";
 import { renderExecutivo } from "./executivo.mjs";
 import { renderMes, renderProjecao, renderFornecedor, mapaCalor, SITUACOES, chaveAlerta, chaveAntiga } from "./gestao.mjs";
 import { comboMensal, saude, treemapCategorias, listaTendencia, multiplos } from "./graficos.mjs";
-import { textoDoPdf, lerContrato, fimVigente } from "./contratos.mjs";
+import { textoDoArquivo, lerContrato, fimVigente } from "./contratos.mjs";
 import { AC, PERFIS, podeEditar, ehAdmin, normUsuario, validarSenha, mensagemErro, carregarFirebase, existeAdministrador, entrar, sair, aoMudarSessao,
   lerPerfil, registrarAcesso, trocarSenha, criarPrimeiroAdmin, criarAcesso, novaSenhaProvisoria, atualizarAcesso, listarAcessos,
   lerDados, gravarMeses, gravarAnalise, gravarAcomp, ouvirAcomp, gravarOrcamento, nomeUsuario, gravarContratos, gravarFundo, registrar, lerRegistros, REGRAS } from "./acesso.mjs";
@@ -1203,22 +1203,26 @@ function pagoNoMes(forn, mes, filtro) { const b = S.todos.find((x) => x.mes === 
 const ctIniMes = (c) => (c.inicio || "").slice(0, 7);
 const diasMes = (mes) => new Date(+mes.slice(0, 4), +mes.slice(5, 7), 0).getDate();
 // valor devido no mês, proporcional quando o contrato começa ou termina no meio do mês
+const ehCumulativo = (c) => c.modalidade === "global" || c.modalidade === "anual";
 function devidoNoMes(c, mes) {
+  if (ehCumulativo(c)) return 0;
+  if (c.modalidade === "parcelado" && c.parcelas) { const ini = ctIniMes(c) || mes, k = (+mes.slice(0, 4) - +ini.slice(0, 4)) * 12 + (+mes.slice(5, 7) - +ini.slice(5, 7)); return k >= 0 && k < c.parcelas ? c.valor : 0; }
   let fr = 1; const dm = diasMes(mes);
   if (c.inicio && c.inicio.length === 10 && c.inicio.slice(0, 7) === mes) fr -= (+c.inicio.slice(8) - 1) / dm;
   const fim = fimContrato(c);
   if (fim && fim.slice(0, 7) === mes) fr -= (dm - +fim.slice(8)) / dm;
   return r2(c.valor * Math.max(0, fr));
 }
-function fimContrato(c) { if (c.prazoMeses && c.inicio && c.inicio.length === 10) { const v = fimVigente(c.inicio, c.prazoMeses, c.renovacaoAuto, hojeISO()); if (v) return v.fim; } return c.fim || ""; }
+function fimContrato(c) { if (c.indeterminado) return ""; if (c.prazoMeses && c.inicio && c.inicio.length === 10) { const v = fimVigente(c.inicio, c.prazoMeses, c.renovacaoAuto, hojeISO()); if (v) return v.fim; } return c.fim || ""; }
 const refIso = (ref) => { const m = /^(\d{2})\/(\d{4})$/.exec(String(ref || "").trim()); return m ? `${m[2]}-${m[1]}` : ""; };
 function analisarContrato(c) {
   const hoje = hojeISO(), tol = (c.tol ?? 2) / 100, fim = fimContrato(c);
   const ms = S.todos.filter((b) => (!c.inicio || b.mes >= ctIniMes(c)) && (!fim || b.mes <= fim.slice(0, 7)));
-  const meses = ms.map((b) => { const dev = devidoNoMes(c, b.mes), p = r2(pagoNoMes(c.forn, b.mes, c.filtro)); const st = !p ? "ausente" : Math.abs(p - dev) <= dev * tol ? "ok" : "dif"; return { mes: b.mes, p, dev, st }; });
+  const meses = ms.map((b) => { const dev = devidoNoMes(c, b.mes), p = r2(pagoNoMes(c.forn, b.mes, c.filtro)); const st = ehCumulativo(c) || (!dev && !p) ? (p ? "pago" : "nada") : !p ? "ausente" : Math.abs(p - dev) <= dev * tol ? "ok" : "dif"; return { mes: b.mes, p, dev, st }; });
   const ult = meses.at(-1), venceEm = fim ? diasEntre(hoje, fim) : null;
-  const totDev = meses.reduce((s2, m) => s2 + m.dev, 0), totPago = meses.reduce((s2, m) => s2 + m.p, 0);
-  return { meses, ult, venceEm, fim, divs: meses.filter((m) => m.st !== "ok").length, totDev: r2(totDev), totPago: r2(totPago), dif: r2(totPago - totDev) };
+  const totPago = meses.reduce((s2, m) => s2 + m.p, 0);
+  const totDev = ehCumulativo(c) ? (c.valorTotal || c.valor || 0) * (c.modalidade === "anual" ? Math.max(1, Math.ceil(meses.length / 12)) : 1) : meses.reduce((s2, m) => s2 + m.dev, 0);
+  return { meses, ult, venceEm, fim, divs: meses.filter((m) => m.st === "dif" || m.st === "ausente").length, totDev: r2(totDev), totPago: r2(totPago), dif: r2(totPago - totDev) };
 }
 function sugestoesContrato() {
   const base = S.todos.slice(-12), ja = new Set((S.contratos || []).map((c) => c.forn));
@@ -1234,7 +1238,7 @@ function contratosTab() {
   const adm = ehAdmin(), lista = S.contratos || [], an = lista.map((c) => ({ c, ...analisarContrato(c) }));
   const ultMes = S.todos.at(-1)?.mes, divUlt = an.filter((x) => x.ult && x.ult.mes === ultMes && x.ult.st !== "ok");
   const venc = an.filter((x) => x.venceEm !== null && x.venceEm <= 60), excesso = an.reduce((s2, x) => s2 + Math.max(0, x.dif), 0);
-  const stTxt = (m) => !m ? "—" : m.st === "ok" ? `<span class="sit resolvido">Conforme</span>` : m.st === "ausente" ? `<span class="sit pendente">Sem pagamento</span>` : `<span class="sit questionado">${m.p > m.dev ? "+" : ""}${brl(m.p - m.dev)}</span>`;
+  const stTxt = (m) => !m ? "—" : m.st === "pago" ? `<span class="sit resolvido">Pago ${brl(m.p)}</span>` : m.st === "nada" ? `<span class="mini">sem cobrança</span>` : m.st === "ok" ? `<span class="sit resolvido">Conforme</span>` : m.st === "ausente" ? `<span class="sit pendente">Sem pagamento</span>` : `<span class="sit questionado">${m.p > m.dev ? "+" : ""}${brl(m.p - m.dev)}</span>`;
   const sug = adm ? sugestoesContrato() : [];
   el.innerHTML = `
   <div class="kpis-sec">
@@ -1243,13 +1247,13 @@ function contratosTab() {
     <div class="kpi ${divUlt.length ? "neg" : "pos"}"><span class="eyebrow">Diferenças em ${ultMes ? rotuloMes(ultMes) : "—"}</span><b>${divUlt.length}</b><span class="det">pagamento diferente do contratado ou ausente</span></div>
     <div class="kpi ${venc.length ? "neg" : ""}"><span class="eyebrow">Vencendo em 60 dias</span><b>${venc.length}</b><span class="det">avaliar renovação ou cotação</span></div>
   </div>
-  ${adm ? `<div class="card importa-ct"><div class="cab"><div class="cab-secao"><span class="eyebrow">Importar</span><h2>Ler contrato em PDF</h2></div>
-      <label class="btn"><input type="file" id="ctArquivo" accept="application/pdf" hidden>Escolher PDF do contrato</label></div>
-    <p class="small muted" style="margin:6px 0 0">O site lê o contrato e preenche fornecedor, número, CNPJ, objeto, valor mensal, início, prazo, renovação, aviso prévio, vencimento, reajuste e valores avulsos. Contratos digitalizados (foto ou escaneados) passam por reconhecimento de texto, que leva cerca de 1 minuto. O arquivo não é enviado nem guardado: só os campos que você confirmar.</p>
+  ${adm ? `<div class="card importa-ct"><div class="cab"><div class="cab-secao"><span class="eyebrow">Importar</span><h2>Ler contrato</h2></div>
+      <label class="btn"><input type="file" id="ctArquivo" accept="application/pdf,.pdf,.docx,.txt,image/*" hidden>Escolher arquivo do contrato</label></div>
+    <p class="small muted" style="margin:6px 0 0">Aceita PDF, Word (.docx), foto ou imagem escaneada e texto. O site identifica o tipo de contrato (serviços, manutenção, obra, seguro, internet, locação…) e lê partes, CNPJ, número, objeto, valor (mensal, parcelado, global ou anual), forma e prazo de pagamento, vigência, renovação, aviso prévio, multas, reajuste, garantia, retenções, prazos de atendimento, quantidades e horários, o que está ou não incluído, coberturas e franquias de seguro, foro e o índice de cláusulas. Arquivos escaneados ou fotos passam por reconhecimento de texto, que leva cerca de 1 minuto. O arquivo não é enviado nem guardado: só os campos que você confirmar.</p>
     <div id="ctProgresso" class="small" hidden></div><div id="ctRevisao"></div></div>` : ""}
   ${lista.length ? `<div class="tabela"><table id="tabContratos"><thead><tr><th>Fornecedor</th><th>Objeto</th><th class="n">Valor/mês</th><th>Último mês</th><th>Situação</th><th class="n">Contratado</th><th class="n">Pago</th><th class="n">Diferença</th><th class="n">Meses</th><th>Vigência</th><th></th></tr></thead><tbody>
     ${an.map(({ c, meses, ult, venceEm, fim, divs, totDev, totPago, dif }) => `<tr class="${S.ctFicha === c.id ? "ativo" : ""}"><td><b style="font-weight:600">${esc(c.forn)}</b>${c.numero ? `<br><span class="mini">contrato ${esc(c.numero)}</span>` : ""}${c.link ? `<br><a class="mini" href="${esc(c.link)}" target="_blank" rel="noopener noreferrer">📎 contrato</a>` : ""}</td>
-      <td>${esc(c.objeto || "")}${c.filtro ? `<br><span class="mini">conta só lançamentos com "${esc(c.filtro)}"</span>` : ""}</td><td class="n">${brl(c.valor)}</td><td>${ult ? rotuloMes(ult.mes) : "—"}</td><td>${stTxt(ult)}</td>
+      <td>${esc(c.objeto || "")}${c.filtro ? `<br><span class="mini">conta só lançamentos com "${esc(c.filtro)}"</span>` : ""}</td><td class="n">${c.modalidade && c.modalidade !== "mensal" ? `<span class="mini">${esc(descreverValor(c))}</span>` : brl(c.valor)}</td><td>${ult ? rotuloMes(ult.mes) : "—"}</td><td>${stTxt(ult)}</td>
       <td class="n">${brl(totDev)}</td><td class="n">${brl(totPago)}</td><td class="n ${dif > 0.01 ? "neg" : dif < -0.01 ? "pos" : ""}">${dif > 0 ? "+" : ""}${brl(dif)}</td>
       <td class="n"><span class="chips">${meses.map((m) => `<i class="chip ${m.st}" data-tip="${esc(`${rotuloMes(m.mes)}\nPago: ${brl(m.p)}\nDevido: ${brl(m.dev)}`)}"></i>`).join("")}</span><span class="mini">${divs} de ${meses.length} com diferença</span></td>
       <td>${c.inicio ? (c.inicio.length === 10 ? dataBR(c.inicio) : rotuloMes(c.inicio)) : "—"} a ${fim ? dataBR(fim) : "indeterminado"}${venceEm !== null ? `<br><span class="mini ${venceEm <= 60 ? "neg" : ""}">${venceEm < 0 ? `vencido há ${-venceEm} dia(s)` : `vence em ${venceEm} dia(s)`}</span>` : ""}</td>
@@ -1278,10 +1282,12 @@ function fichaContrato(c) {
   const repetidas = Object.entries(porComp).filter(([, v]) => v.length > 1);
   // a competência do último balancete costuma ser paga no mês seguinte: não conta como falta
   const ultBal = S.todos.at(-1)?.mes;
-  const semComp = linhas.filter((l) => !l.comp.length && l.mes !== ultBal).map((l) => l.mes);
-  const acima = linhas.filter((l) => l.pc > l.dev * (1 + (c.tol ?? 2) / 100));
+  const cum = ehCumulativo(c);
+  const semComp = cum ? [] : linhas.filter((l) => !l.comp.length && l.dev > 0 && l.mes !== ultBal).map((l) => l.mes);
+  const acima = cum ? [] : linhas.filter((l) => l.pc > l.dev * (1 + (c.tol ?? 2) / 100));
   const avisoData = fim && c.avisoDias ? somaDias(fim, -c.avisoDias) : "";
   const perguntas = [];
+  if (cum && an.totDev && an.totPago > an.totDev * 1.02) perguntas.push(`Já foram pagos ${brl(an.totPago)}, acima do valor ${c.modalidade === "anual" ? "anual" : "global"} de ${brl(an.totDev)} previsto no contrato${c.numero ? ` nº ${c.numero}` : ""}. Pedimos o detalhamento e os aditivos que justificam a diferença.`);
   if (acima.length) perguntas.push(`Nas competências ${acima.map((l) => rotuloMes(l.mes)).join(", ")} foram pagos valores acima dos ${brl(c.valor)} mensais previstos no contrato${c.numero ? ` nº ${c.numero}` : ""} (${brl(acima.reduce((s2, l) => s2 + l.difC, 0))} acima nesses meses; no período todo, ${brl(an.totPago)} pagos contra ${brl(an.totDev)} devidos). Pedimos as notas fiscais com a composição de cada valor e o fundamento contratual.`);
   if (repetidas.length) perguntas.push(`As competências ${repetidas.map(([k]) => rotuloMes(k)).join(", ")} aparecem em mais de um pagamento (${repetidas.map(([k, v]) => `${rotuloMes(k)}: NF ${v.map((d) => d.nf).join(" e ")}`).join("; ")}). Pedimos esclarecer se houve pagamento em duplicidade ou competência informada errada.`);
   if (semComp.length) perguntas.push(`Não há pagamento identificado para as competências ${semComp.map(rotuloMes).join(", ")}. Pedimos confirmar se estão quitadas e em qual nota.`);
@@ -1304,16 +1310,22 @@ function fichaContrato(c) {
     <dl class="ficha-dados">
       ${c.numero ? `<div><dt>Contrato</dt><dd>nº ${esc(c.numero)}</dd></div>` : ""}${c.cnpj ? `<div><dt>CNPJ</dt><dd>${esc(c.cnpj)}</dd></div>` : ""}
       <div><dt>Objeto</dt><dd>${esc(c.objeto || "—")}</dd></div>
-      <div><dt>Valor mensal</dt><dd>${brl(c.valor)}${c.diaVenc ? ` · vence dia ${c.diaVenc}` : ""}</dd></div>
+      ${c.tipo ? `<div><dt>Tipo</dt><dd>${esc(c.tipo)}</dd></div>` : ""}
+      <div><dt>Valor</dt><dd>${descreverValor(c)}${c.diaVenc ? ` · vence dia ${c.diaVenc}` : ""}${c.formaPagamento ? ` · ${esc(c.formaPagamento)}` : ""}</dd></div>
+      ${c.contratado && c.contratado !== c.forn ? `<div><dt>Razão social</dt><dd>${esc(c.contratado)}</dd></div>` : ""}
+      ${c.assinatura ? `<div><dt>Assinado em</dt><dd>${dataBR(c.assinatura)}</dd></div>` : ""}
       <div><dt>Vigência</dt><dd>${c.inicio ? (c.inicio.length === 10 ? dataBR(c.inicio) : rotuloMes(c.inicio)) : "—"} a ${fim ? dataBR(fim) : "indeterminado"}${c.prazoMeses ? ` · períodos de ${c.prazoMeses} meses` : ""}${c.renovacaoAuto ? " · renovação automática" : ""}</dd></div>
       ${avisoData ? `<div><dt>Aviso para não renovar</dt><dd>até ${dataBR(avisoData)} (${c.avisoDias} dias antes)</dd></div>` : ""}
       ${c.reajuste ? `<div><dt>Reajuste</dt><dd>${esc(c.reajuste)}</dd></div>` : ""}
       ${(c.adicionais || []).length ? `<div><dt>Valores avulsos previstos</dt><dd>${c.adicionais.map((x) => `${brl(x.valor)} ${esc(x.desc)}`).join(" · ")}</dd></div>` : ""}
       ${c.multa ? `<div><dt>Multa por atraso</dt><dd>${esc(c.multa)}</dd></div>` : ""}
+      ${c.multaRescisoria ? `<div><dt>Rescisão</dt><dd>${esc(c.multaRescisoria)}</dd></div>` : ""}
+      ${(c.info || []).map((x) => `<div><dt>${esc(x.rot)}</dt><dd>${esc(x.txt)}</dd></div>`).join("")}
     </dl>
+    ${(c.clausulas || []).length ? `<details class="clausulas-ct"><summary>Cláusulas do contrato (${c.clausulas.length})</summary><ol>${c.clausulas.map((x) => `<li>${esc(x)}</li>`).join("")}</ol></details>` : ""}
     <div class="kpis-sec" style="margin-top:14px">
-      <div class="kpi"><span class="eyebrow">Devido pelo contrato</span><b>${brl(an.totDev)}</b><span class="det">${an.meses.length} mês(es), com proporcional</span></div>
-      <div class="kpi ${an.dif > 0.01 ? "neg" : "pos"}"><span class="eyebrow">Pago (mensalidade)</span><b>${brl(an.totPago)}</b><span class="det">${an.dif > 0.01 ? `${brl(an.dif)} acima` : an.dif < -0.01 ? `${brl(-an.dif)} abaixo` : "igual ao devido"}</span></div>
+      <div class="kpi"><span class="eyebrow">${ehCumulativo(c) ? "Valor do contrato" : "Devido pelo contrato"}</span><b>${brl(an.totDev)}</b><span class="det">${ehCumulativo(c) ? `${c.modalidade === "anual" ? "por ano de vigência" : "valor global"} · ${an.totDev ? pct(an.totPago / an.totDev) : "—"} já pago` : `${an.meses.length} mês(es)${c.modalidade === "parcelado" ? ` · ${c.parcelas} parcela(s)` : ", com proporcional"}`}</span></div>
+      <div class="kpi ${an.dif > 0.01 ? "neg" : "pos"}"><span class="eyebrow">Pago ${c.filtro ? "(contrato)" : ""}</span><b>${brl(an.totPago)}</b><span class="det">${an.dif > 0.01 ? `${brl(an.dif)} acima` : an.dif < -0.01 ? `${brl(-an.dif)} abaixo` : "igual ao devido"}</span></div>
       <div class="kpi"><span class="eyebrow">Outros pagamentos ao fornecedor</span><b>${brl(foraL.reduce((s2, d) => s2 + d.v, 0))}</b><span class="det">${foraL.length} lançamento(s) fora da mensalidade</span></div>
       <div class="kpi"><span class="eyebrow">Total pago ao fornecedor</span><b>${brl(an.totPago + foraL.reduce((s2, d) => s2 + d.v, 0))}</b><span class="det">no período dos balancetes</span></div>
     </div>
@@ -1344,20 +1356,29 @@ function formContrato(c) {
       <label>Nº do contrato<input id="ctNum" value="${esc(c?.numero || "")}"></label>
       <label>CNPJ<input id="ctCnpj" value="${esc(c?.cnpj || "")}"></label>
       <label>Objeto<input id="ctObj" value="${esc(c?.objeto || "")}" placeholder="ex.: portaria 24h"></label>
-      <label>Valor mensal contratado (R$)<input id="ctValor" inputmode="decimal" required value="${fmtValor(c?.valor || 0)}"></label>
+      <label>Tipo<input id="ctTipo" list="listaTiposCt" value="${esc(c?.tipo || "")}" placeholder="ex.: Limpeza e conservação"></label>
+      <label>Modalidade de pagamento<select id="ctModal">${[["mensal", "Mensal"], ["parcelado", "Parcelado"], ["global", "Valor global (por medição/avulso)"], ["anual", "Anual"]].map(([k, t2]) => `<option value="${k}" ${(c?.modalidade || "mensal") === k ? "selected" : ""}>${t2}</option>`).join("")}</select></label>
+      <label>Valor mensal ou da parcela (R$)<input id="ctValor" inputmode="decimal" required value="${fmtValor(c?.valor || 0)}"></label>
+      <label>Valor total (R$)<input id="ctTotal" inputmode="decimal" value="${fmtValor(c?.valorTotal || 0)}" placeholder="para global, anual ou parcelado"></label>
+      <label>Nº de parcelas<input id="ctParc" inputmode="numeric" value="${c?.parcelas || ""}"></label>
+      <label>Forma de pagamento<input id="ctFormaPg" value="${esc(c?.formaPagamento || "")}" placeholder="ex.: boleto"></label>
       <label>Vencimento (dia do mês)<input id="ctDia" inputmode="numeric" value="${c?.diaVenc || ""}"></label>
       <label>Início<input id="ctIni" type="date" value="${c?.inicio && c.inicio.length === 10 ? c.inicio : c?.inicio ? c.inicio + "-01" : ""}"></label>
       <label>Prazo (meses)<input id="ctPrazo" inputmode="numeric" value="${c?.prazoMeses || ""}" placeholder="ex.: 12"></label>
       <label class="check"><input type="checkbox" id="ctRenova" ${c?.renovacaoAuto ? "checked" : ""}> Renova automaticamente</label>
+      <label class="check"><input type="checkbox" id="ctIndet" ${c?.indeterminado ? "checked" : ""}> Prazo indeterminado</label>
       <label>Fim (se não houver prazo)<input id="ctFim" type="date" value="${c?.fim || ""}"></label>
       <label>Aviso prévio para não renovar (dias)<input id="ctAviso" inputmode="numeric" value="${c?.avisoDias || ""}"></label>
       <label>Reajuste<input id="ctReaj" value="${esc(c?.reajuste || "")}" placeholder="ex.: IPCA em janeiro"></label>
       <label>Multa por atraso<input id="ctMulta" value="${esc(c?.multa || "")}" placeholder="ex.: 2%"></label>
+      <label>Multa por rescisão<input id="ctMultaR" value="${esc(c?.multaRescisoria || "")}" placeholder="ex.: 1 mensalidade"></label>
       <label>Valores avulsos previstos<input id="ctAdic" value="${esc(ad)}" placeholder="ex.: 50,00 por certidão; 100,00 por audiência"></label>
       <label>Tolerância (%)<input id="ctTol" inputmode="decimal" value="${String(c?.tol ?? 2).replace(".", ",")}"></label>
       <label>Contar só lançamentos com o texto<input id="ctFiltro" value="${esc(c?.filtro || "")}" placeholder="ex.: ASSESSORIA (opcional)"></label>
       <label>Link do contrato<input id="ctLink" type="url" value="${esc(c?.link || "")}" placeholder="https:// (Google Drive, opcional)"></label>
     </div>
+    <datalist id="listaTiposCt">${["Portaria e segurança", "Limpeza e conservação", "Manutenção de elevadores", "Manutenção predial", "Seguro", "Internet e telefonia", "Obra e reforma", "Assessoria jurídica", "Administração condominial", "Mão de obra terceirizada", "Locação"].map((x) => `<option value="${x}">`).join("")}</datalist>
+    ${(c?.info || []).length ? `<p class="mini" style="margin-top:8px">Também serão guardadas ${c.info.length} informação(ões) lidas do contrato (${esc(c.info.map((x) => x.rot).join(", "))}), exibidas na ficha.</p>` : ""}
     <datalist id="listaForn">${forns.map((f) => `<option value="${esc(f)}">`).join("")}</datalist>
     <div class="acoes" style="margin-top:10px"><button class="btn" type="submit">${c && c.id ? "Salvar alterações" : "Cadastrar contrato"}</button>${c ? `<button class="btn sec" type="button" id="ctCancelar">Cancelar</button>` : ""}<span class="small muted" id="ctMsg"></span></div>`;
 }
@@ -1366,13 +1387,12 @@ async function importarContrato(f) {
   const pr = $("#ctProgresso"), rv = $("#ctRevisao"); pr.hidden = false; rv.innerHTML = "";
   const msg = (t) => { pr.textContent = t; };
   try {
-    const lib = await carregarPdfjs();
-    const { texto, ocr, paginas } = await textoDoPdf(lib, new Uint8Array(await f.arrayBuffer()), msg);
+    const { texto, ocr, paginas } = await textoDoArquivo(carregarPdfjs, f, msg);
     const r = lerContrato(texto, porFornecedor(S.todos).map((x) => x.forn)), C = r.campos;
-    if (!C.contratado && !C.valor) { msg(`Não consegui identificar os dados em "${f.name}" (${paginas} página(s)${ocr ? ", lida por reconhecimento de texto" : ""}). Preencha o formulário manualmente.`); return; }
+    if (!C.contratado && !C.valor && !C.objeto) { msg(`Não consegui identificar os dados em "${f.name}" (${paginas} página(s)${ocr ? ", lida por reconhecimento de texto" : ""}). Preencha o formulário manualmente.`); return; }
     msg(`"${f.name}" lido (${paginas} página(s)${ocr ? ", por reconhecimento de texto: confira com atenção" : ""}).`);
     const fv = C.inicio && C.prazoMeses ? fimVigente(C.inicio, C.prazoMeses, C.renovacaoAuto, hojeISO()) : null;
-    S.ctLido = { ...C, forn: C.forn || C.contratado || "", tol: 2, origem: f.name, fim: C.fim || "", filtro: "" };
+    S.ctLido = { ...C, forn: C.forn || C.contratado || "", tol: 2, origem: f.name, fim: C.fim || "", filtro: "", lidoEm: new Date().toISOString() };
     // sugere o filtro quando o fornecedor também recebe reembolsos (palavra principal do histórico das mensalidades)
     if (S.ctLido.forn && C.valor) {
       const ls2 = S.todos.flatMap((b) => b.despesas.filter((d) => d.forn === S.ctLido.forn));
@@ -1386,23 +1406,38 @@ async function importarContrato(f) {
       ${linha("Fornecedor nos balancetes", C.forn ? `<b>${esc(C.forn)}</b>` : '<span class="neg">nenhum fornecedor parecido nos balancetes</span>')}
       ${linha("Nº do contrato", esc(C.numero || ""), r.trechos.numero)}${linha("CNPJ", esc(C.cnpj || ""))}
       ${linha("Objeto", esc(C.objeto || ""), r.trechos.objeto)}
-      ${linha("Valor mensal", C.valor ? brl(C.valor) : "", r.trechos.valor)}
+      ${linha("Tipo de contrato", esc(C.tipo || ""))}
+      ${linha("Valor", descreverValor(C), r.trechos.valor)}
+      ${linha("Forma de pagamento", esc(C.formaPagamento || ""))}
       ${linha("Início", C.inicio ? dataBR(C.inicio) : "", r.trechos.inicio)}
-      ${linha("Prazo", C.prazoMeses ? `${C.prazoMeses} meses${C.renovacaoAuto ? ", renovação automática" : ""}${fv ? ` · período atual até ${dataBR(fv.fim)}${fv.renovacoes ? ` (${fv.renovacoes} renovação(ões))` : ""}` : ""}` : "", r.trechos.prazo)}
+      ${linha("Prazo", C.indeterminado ? "prazo indeterminado" : C.prazoMeses ? `${C.prazoMeses} meses${C.renovacaoAuto ? ", renovação automática" : ""}${fv ? ` · período atual até ${dataBR(fv.fim)}${fv.renovacoes ? ` (${fv.renovacoes} renovação(ões))` : ""}` : ""}` : C.prazoDias ? `${C.prazoDias} dias` : "", r.trechos.prazo)}
+      ${linha("Fim", C.fim ? dataBR(C.fim) : "", r.trechos.fim)}
+      ${linha("Assinatura", C.assinatura ? dataBR(C.assinatura) : "")}
       ${linha("Aviso prévio", C.avisoDias ? `${C.avisoDias} dias` : "", r.trechos.aviso)}
       ${linha("Vencimento", C.diaVenc ? `dia ${C.diaVenc}` : "")}
       ${linha("Reajuste", esc(C.reajuste || ""), r.trechos.reajuste)}
       ${linha("Valores avulsos", (C.adicionais || []).map((x) => `${brl(x.valor)} ${esc(x.desc)}`).join(" · "))}
-      ${linha("Multa", esc(C.multa || ""))}
+      ${linha("Multa por atraso", esc(C.multa || ""))}
+      ${linha("Rescisão", esc(C.multaRescisoria || ""))}
+      ${(C.info || []).map((x) => linha(esc(x.rot), esc(x.txt), r.trechos[x.rot])).join("")}
+      ${linha("Cláusulas encontradas", (C.clausulas || []).length ? `${C.clausulas.length}: ${esc(C.clausulas.slice(0, 12).join(" · "))}${C.clausulas.length > 12 ? "…" : ""}` : "")}
       ${linha("Filtro sugerido", S.ctLido.filtro ? `lançamentos com "${esc(S.ctLido.filtro)}" (o fornecedor também recebe outros pagamentos)` : "")}
     </tbody></table></div>
     <div class="acoes" style="margin-top:10px"><button class="btn" type="button" id="ctUsarLido">Preencher o cadastro com estes dados</button></div>`;
     registrar("Importou contrato", f.name);
   } catch (e) { msg(`Não foi possível ler "${f.name}": ${e.message}`); }
 }
+function descreverValor(c) {
+  if (!c || (!c.valor && !c.valorTotal)) return "";
+  if (c.modalidade === "parcelado") return `${c.valorTotal ? brl(c.valorTotal) + " em " : ""}${c.parcelas || "?"} parcela(s) de ${brl(c.valor)}`;
+  if (c.modalidade === "global") return `${brl(c.valorTotal || c.valor)} (valor global)`;
+  if (c.modalidade === "anual") return `${brl(c.valorTotal || c.valor * 12)} por ano (${brl(c.valor)}/mês)`;
+  return `${brl(c.valor)} por mês`;
+}
 function lerFormContrato() {
   const adic = $("#ctAdic").value.split(";").map((x) => x.trim()).filter(Boolean).map((x) => { const m = /^([\d.,]+)\s*(.*)$/.exec(x); return m ? { valor: parseValor(m[1]), desc: m[2] } : { valor: 0, desc: x }; });
   return { forn: $("#ctForn").value.trim(), numero: $("#ctNum").value.trim(), cnpj: $("#ctCnpj").value.trim(), objeto: $("#ctObj").value.trim(), valor: parseValor($("#ctValor").value),
+    tipo: $("#ctTipo").value.trim(), modalidade: $("#ctModal").value, valorTotal: parseValor($("#ctTotal").value) || null, parcelas: +$("#ctParc").value || null, formaPagamento: $("#ctFormaPg").value.trim(), multaRescisoria: $("#ctMultaR").value.trim(), indeterminado: $("#ctIndet").checked,
     diaVenc: +$("#ctDia").value || null, inicio: $("#ctIni").value, prazoMeses: +$("#ctPrazo").value || null, renovacaoAuto: $("#ctRenova").checked, fim: $("#ctFim").value,
     avisoDias: +$("#ctAviso").value || null, reajuste: $("#ctReaj").value.trim(), multa: $("#ctMulta").value.trim(), adicionais: adic, tol: parseValor($("#ctTol").value) || 2,
     filtro: $("#ctFiltro").value.trim(), link: urlValida($("#ctLink").value.trim()) ? $("#ctLink").value.trim() : "" };
@@ -1761,7 +1796,8 @@ document.addEventListener("submit", async (e) => {
     const dados = lerFormContrato();
     if (!dados.forn || !dados.valor) return ($("#ctMsg").textContent = "Informe o fornecedor e o valor mensal.");
     const id = f.dataset.id || novoId();
-    const c = { ...(S.contratos.find((x) => x.id === id) || {}), ...dados, id, origem: S.ctRascunho?.origem || S.contratos.find((x) => x.id === id)?.origem || "", por: nomeUsuario(), ts: new Date().toISOString() };
+    const lido = S.ctRascunho || {};
+    const c = { ...(S.contratos.find((x) => x.id === id) || {}), ...(lido.info ? { info: lido.info, clausulas: lido.clausulas || [], assinatura: lido.assinatura || "", prazoDias: lido.prazoDias || null, contratado: lido.contratado || "" } : {}), ...dados, id, origem: S.ctRascunho?.origem || S.contratos.find((x) => x.id === id)?.origem || "", por: nomeUsuario(), ts: new Date().toISOString() };
     const antes = S.contratos; S.contratos = [...S.contratos.filter((x) => x.id !== id), c].sort((a, b) => a.forn.localeCompare(b.forn, "pt-BR"));
     try { await salvarConteudo("contratos"); registrar(f.dataset.id ? "Alterou contrato" : "Cadastrou contrato", `${c.forn} · ${brl(c.valor)}`); S.ctEditando = ""; S.ctRascunho = null; S.ctFicha = id; toast("Contrato salvo."); render(); setTimeout(() => $("#ctFicha")?.scrollIntoView({ block: "start" }), 50); }
     catch (err) { S.contratos = antes; $("#ctMsg").textContent = mensagemErro(err); }
