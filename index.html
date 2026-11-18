@@ -544,9 +544,26 @@ b.neg, td.neg { color: #b4231a; } td.pos { color: #1d7a4b; }
 .ag.reuniao { border-left-color: var(--brand); } .ag.assembleia { border-left-color: var(--gold); } .ag.prazo { border-left-color: var(--farol); }
 .ag-data { text-align: center; line-height: 1.1; } .ag-data b { display: block; font-size: 1.35rem; color: var(--brand); } .ag-data span { font-size: .75rem; text-transform: uppercase; color: var(--muted); }
 .ag-txt { display: grid; gap: 2px; } .ag-quando { font-size: .85rem; color: var(--muted); white-space: nowrap; display: flex; align-items: center; gap: 6px; }
-.chips { display: flex; flex-wrap: wrap; gap: 2px; max-width: 170px; margin: 0 0 3px auto; }
-.chip { width: 9px; height: 14px; border-radius: 2px; background: #cfd8e0; }
-.chip.ok, .chip.pago { background: #2a9d8f; } .chip.nada { background: #e3e9ef; } .chip.dif { background: #e0a100; } .chip.ausente { background: #d9663a; }
+/* contratos: cartões, faixa de meses e linha do tempo (classes próprias, sem conflito com os filtros .chip) */
+.mchip { display: inline-block; width: 12px; height: 18px; border-radius: 3px; background: #cfd8e0; }
+.mchip.ok, .mchip.pago { background: #2a9d8f; } .mchip.nada { background: #e3e9ef; } .mchip.dif { background: #e0a100; } .mchip.ausente { background: #d9663a; }
+.ct-filtros { display: flex; flex-wrap: wrap; gap: 10px 16px; align-items: center; justify-content: space-between; }
+.ct-filtros input { font: inherit; border: 1px solid var(--line-2); border-radius: 8px; padding: 8px 12px; min-width: min(280px, 100%); background: #fff; }
+.ct-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 340px), 1fr)); gap: 16px; }
+.ct-card { display: grid; gap: 10px; align-content: start; background: #fff; border: 1px solid var(--line); border-top: 5px solid #2a9d8f; border-radius: var(--r); padding: 16px 18px; box-shadow: var(--sombra); }
+.ct-card.atencao { border-top-color: #e0a100; } .ct-card.critico { border-top-color: var(--farol); } .ct-card.ativo { outline: 3px solid var(--gold); outline-offset: 1px; }
+.ct-topo { display: flex; justify-content: space-between; gap: 8px; align-items: flex-start; flex-wrap: wrap; }
+.ct-est { font-size: .78rem; font-weight: 700; padding: 3px 9px; border-radius: 999px; background: #ddf0e5; color: #1d7a4b; }
+.ct-est.atencao { background: #fdf0d2; color: #8a5800; } .ct-est.critico { background: #fdecea; color: #a1281c; }
+.ct-card h3 { margin: 0; font-size: 1.12rem; color: var(--brand); }
+.ct-obj { margin: 0; color: var(--muted); font-size: .9rem; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.ct-valor b { font-size: 1.15rem; color: var(--ink); } .ct-valor span { color: var(--muted); }
+.ct-vig { display: grid; gap: 4px; } .ct-vig-txt { display: flex; justify-content: space-between; font-size: .82rem; color: var(--muted); }
+.ct-barra { height: 8px; border-radius: 4px; background: #e8eef4; overflow: hidden; } .ct-barra span { display: block; height: 100%; background: linear-gradient(90deg, #0b5a8c, #054166); }
+.ct-nums { display: grid; grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); gap: 8px 12px; padding: 10px 0; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
+.ct-nums span { display: block; font-size: .72rem; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); } .ct-nums b { font-size: .92rem; white-space: nowrap; }
+.ct-meses { display: flex; flex-wrap: wrap; gap: 3px; align-items: center; } .ct-meses .mini { margin-left: 6px; }
+.btn-link { font-size: .82rem; font-weight: 600; color: var(--accent); padding: 4px 9px; border: 1px solid var(--line-2); border-radius: 6px; text-decoration: none; }
 .grupo-av { list-style: none; font-size: .78rem; font-weight: 800; text-transform: uppercase; letter-spacing: .05em; color: var(--brand); padding: 6px 0 0 !important; border: 0 !important; background: none !important; }
 #cardProposta input, #cardFundo input { font: inherit; border: 1px solid var(--line-2); border-radius: 6px; padding: 6px 8px; }
 @media (max-width: 700px) { .link-add { grid-template-columns: minmax(0, 1fr); } .ag { grid-template-columns: 48px minmax(0, 1fr); } .ag-quando { grid-column: 2; } }

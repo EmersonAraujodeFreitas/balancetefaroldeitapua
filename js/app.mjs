@@ -1251,15 +1251,12 @@ function contratosTab() {
       <label class="btn"><input type="file" id="ctArquivo" accept="application/pdf,.pdf,.docx,.txt,image/*" hidden>Escolher arquivo do contrato</label></div>
     <p class="small muted" style="margin:6px 0 0">Aceita PDF, Word (.docx), foto ou imagem escaneada e texto. O site identifica o tipo de contrato (serviços, manutenção, obra, seguro, internet, locação…) e lê partes, CNPJ, número, objeto, valor (mensal, parcelado, global ou anual), forma e prazo de pagamento, vigência, renovação, aviso prévio, multas, reajuste, garantia, retenções, prazos de atendimento, quantidades e horários, o que está ou não incluído, coberturas e franquias de seguro, foro e o índice de cláusulas. Arquivos escaneados ou fotos passam por reconhecimento de texto, que leva cerca de 1 minuto. O arquivo não é enviado nem guardado: só os campos que você confirmar.</p>
     <div id="ctProgresso" class="small" hidden></div><div id="ctRevisao"></div></div>` : ""}
-  ${lista.length ? `<div class="tabela"><table id="tabContratos"><thead><tr><th>Fornecedor</th><th>Objeto</th><th class="n">Valor/mês</th><th>Último mês</th><th>Situação</th><th class="n">Contratado</th><th class="n">Pago</th><th class="n">Diferença</th><th class="n">Meses</th><th>Vigência</th><th></th></tr></thead><tbody>
-    ${an.map(({ c, meses, ult, venceEm, fim, divs, totDev, totPago, dif }) => `<tr class="${S.ctFicha === c.id ? "ativo" : ""}"><td><b style="font-weight:600">${esc(c.forn)}</b>${c.numero ? `<br><span class="mini">contrato ${esc(c.numero)}</span>` : ""}${c.link ? `<br><a class="mini" href="${esc(c.link)}" target="_blank" rel="noopener noreferrer">📎 contrato</a>` : ""}</td>
-      <td>${esc(c.objeto || "")}${c.filtro ? `<br><span class="mini">conta só lançamentos com "${esc(c.filtro)}"</span>` : ""}</td><td class="n">${c.modalidade && c.modalidade !== "mensal" ? `<span class="mini">${esc(descreverValor(c))}</span>` : brl(c.valor)}</td><td>${ult ? rotuloMes(ult.mes) : "—"}</td><td>${stTxt(ult)}</td>
-      <td class="n">${brl(totDev)}</td><td class="n">${brl(totPago)}</td><td class="n ${dif > 0.01 ? "neg" : dif < -0.01 ? "pos" : ""}">${dif > 0 ? "+" : ""}${brl(dif)}</td>
-      <td class="n"><span class="chips">${meses.map((m) => `<i class="chip ${m.st}" data-tip="${esc(`${rotuloMes(m.mes)}\nPago: ${brl(m.p)}\nDevido: ${brl(m.dev)}`)}"></i>`).join("")}</span><span class="mini">${divs} de ${meses.length} com diferença</span></td>
-      <td>${c.inicio ? (c.inicio.length === 10 ? dataBR(c.inicio) : rotuloMes(c.inicio)) : "—"} a ${fim ? dataBR(fim) : "indeterminado"}${venceEm !== null ? `<br><span class="mini ${venceEm <= 60 ? "neg" : ""}">${venceEm < 0 ? `vencido há ${-venceEm} dia(s)` : `vence em ${venceEm} dia(s)`}</span>` : ""}</td>
-      <td><div class="acoes-lin"><button type="button" data-ct-ficha="${c.id}">${S.ctFicha === c.id ? "Fechar" : "Detalhar"}</button>${adm ? `<button type="button" data-ct-edit="${c.id}">Editar</button><button type="button" class="perigo" data-ct-del="${c.id}">Excluir</button>` : ""}</div></td></tr>`).join("")}
-  </tbody></table></div>
-  <p class="mini">Cada quadradinho é um mês, pela data do pagamento: verde conforme, amarelo valor diferente do devido (tolerância de 2% ou a definida no contrato), vermelho sem pagamento. O primeiro e o último mês são proporcionais aos dias de vigência.</p>` : `<div class="vazio card">Nenhum contrato cadastrado.${adm ? " Importe o PDF do contrato, use o formulário abaixo ou as sugestões." : ""}</div>`}
+  ${lista.length ? `
+  <div class="ct-filtros"><div class="chips" role="group" aria-label="Filtrar contratos">${[["todos", "Todos"], ["dif", "Com diferença"], ["venc", "Vencendo em 60 dias"], ["ok", "Em dia"]].map(([k, t2]) => `<button type="button" class="chip" data-ct-filtro="${k}" aria-pressed="${(S.ctFiltro || "todos") === k}">${t2}</button>`).join("")}</div>
+    <input type="search" id="ctBusca" placeholder="Buscar fornecedor ou objeto" value="${esc(S.ctBusca || "")}"></div>
+  <div class="ct-grid">${an.filter((x) => filtroCt(x)).map((x) => cartaoContrato(x, adm)).join("") || '<p class="muted">Nenhum contrato neste filtro.</p>'}</div>
+  ${linhaDoTempo(an)}
+  <p class="mini">Na faixa de meses de cada cartão, cada quadradinho é um mês pela data do pagamento: verde conforme, amarelo valor diferente do devido, vermelho sem pagamento, cinza sem cobrança. O primeiro e o último mês são proporcionais aos dias de vigência.</p>` : `<div class="vazio card">Nenhum contrato cadastrado.${adm ? " Importe o PDF do contrato, use o formulário abaixo ou as sugestões." : ""}</div>`}
   <div id="ctFicha">${S.ctFicha && lista.find((c) => c.id === S.ctFicha) ? fichaContrato(lista.find((c) => c.id === S.ctFicha)) : ""}</div>
   ${adm ? `<form class="card" id="fContrato" data-id="${S.ctEditando || ""}">${formContrato(lista.find((c) => c.id === S.ctEditando) || S.ctRascunho)}</form>
   ${sug.length ? `<div class="card"><div class="cab-secao"><span class="eyebrow">Sugestões</span><h2>Pagamentos que parecem contratos fixos</h2></div>
@@ -1269,6 +1266,59 @@ function contratosTab() {
     </tbody></table></div></div>` : ""}` : ""}`;
 }
 // ficha do contrato: mês a mês, pela data de pagamento e pela competência informada na nota
+// filtros e cartões da lista de contratos
+function filtroCt(x) {
+  const f = S.ctFiltro || "todos", b = normTxt(S.ctBusca || "").trim();
+  if (b && !normTxt(`${x.c.forn} ${x.c.objeto || ""} ${x.c.tipo || ""} ${x.c.numero || ""}`).includes(b)) return false;
+  if (f === "dif") return x.dif > 0.01 || (x.ult && (x.ult.st === "dif" || x.ult.st === "ausente"));
+  if (f === "venc") return x.venceEm !== null && x.venceEm <= 60;
+  if (f === "ok") return !(x.dif > 0.01) && !(x.ult && (x.ult.st === "dif" || x.ult.st === "ausente"));
+  return true;
+}
+function cartaoContrato({ c, meses, ult, venceEm, fim, divs, totDev, totPago, dif }, adm) {
+  const hoje = hojeISO(), ini = c.inicio ? (c.inicio.length === 10 ? c.inicio : c.inicio + "-01") : "";
+  const prog = ini && fim ? Math.max(0, Math.min(1, diasEntre(ini, hoje) / Math.max(1, diasEntre(ini, fim)))) : null;
+  const tolV = Math.max(1, totDev * ((c.tol ?? 2) / 100));
+  const est = ult && ult.st === "ausente" ? ["critico", `Sem pagamento em ${rotuloMes(ult.mes)}`]
+    : ult && ult.st === "dif" ? ["atencao", `${rotuloMes(ult.mes)}: ${ult.p > ult.dev ? "+" : ""}${brl(ult.p - ult.dev)}`]
+    : dif > tolV ? ["atencao", `${brl(dif)} pagos acima`]
+    : dif < -tolV && !(ehCumulativo(c) && venceEm !== null && venceEm > 0) ? ["atencao", `${brl(-dif)} a menos que o devido`]
+    : divs ? ["atencao", `${divs} mês(es) com diferença`] : ["ok", "Pagamentos em dia"];
+  return `<article class="ct-card ${est[0]} ${S.ctFicha === c.id ? "ativo" : ""}">
+    <div class="ct-topo"><span class="eyebrow">${esc(c.tipo || "Contrato")}${c.numero ? ` · nº ${esc(c.numero)}` : ""}</span><span class="ct-est ${est[0]}">${esc(est[1])}</span></div>
+    <h3>${esc(c.forn)}</h3>
+    <p class="ct-obj">${esc(c.objeto || "")}</p>
+    <div class="ct-valor"><b>${c.modalidade && c.modalidade !== "mensal" ? esc(descreverValor(c)) : brl(c.valor)}</b>${!c.modalidade || c.modalidade === "mensal" ? "<span>/mês</span>" : ""}${c.diaVenc ? `<span class="mini"> · vence dia ${c.diaVenc}</span>` : ""}</div>
+    <div class="ct-vig"><div class="ct-vig-txt"><span>${ini ? dataBR(ini) : "início não informado"}</span><span>${fim ? dataBR(fim) : c.indeterminado ? "prazo indeterminado" : "sem fim"}</span></div>
+      ${prog !== null ? `<div class="ct-barra"><span style="width:${prog * 100}%"></span></div>` : ""}
+      <span class="mini ${venceEm !== null && venceEm <= 60 ? "neg" : ""}">${venceEm === null ? (c.renovacaoAuto ? "renovação automática" : "") : venceEm < 0 ? `vencido há ${-venceEm} dia(s)` : `vence em ${venceEm} dia(s)${c.renovacaoAuto ? " · renova automaticamente" : ""}`}</span></div>
+    <div class="ct-nums"><div><span>${ehCumulativo(c) ? "Valor do contrato" : "Devido"}</span><b>${brl(totDev)}</b></div><div><span>Pago</span><b>${brl(totPago)}</b></div><div><span>Diferença</span><b class="${dif > 0.01 ? "neg" : dif < -0.01 ? "pos" : ""}">${dif > 0 ? "+" : ""}${brl(dif)}</b></div></div>
+    <div class="ct-meses" aria-label="Pagamentos por mês">${meses.map((m) => `<i class="mchip ${m.st}" data-tip="${esc(`${rotuloMes(m.mes)}\nPago: ${brl(m.p)}\nDevido: ${brl(m.dev)}`)}"></i>`).join("")}<span class="mini">${divs} de ${meses.length} mês(es) com diferença</span></div>
+    ${c.filtro ? `<p class="mini">Conta só lançamentos com "${esc(c.filtro)}"</p>` : ""}
+    <div class="acoes-lin"><button type="button" data-ct-ficha="${c.id}">${S.ctFicha === c.id ? "Fechar ficha" : "Ver ficha completa"}</button>${c.link ? `<a class="btn-link" href="${esc(c.link)}" target="_blank" rel="noopener noreferrer">📎 PDF</a>` : ""}${adm ? `<button type="button" data-ct-edit="${c.id}">Editar</button><button type="button" class="perigo" data-ct-del="${c.id}">Excluir</button>` : ""}</div>
+  </article>`;
+}
+// linha do tempo de todos os contratos, com o dia de hoje marcado
+function linhaDoTempo(an) {
+  const itens = an.map((x) => ({ c: x.c, ini: x.c.inicio ? (x.c.inicio.length === 10 ? x.c.inicio : x.c.inicio + "-01") : "", fim: x.fim })).filter((x) => x.ini);
+  if (!itens.length) return "";
+  const hoje = hojeISO(), a0 = itens.reduce((m, x) => (x.ini < m ? x.ini : m), hoje).slice(0, 7) + "-01";
+  let a1 = itens.reduce((m, x) => ((x.fim || hoje) > m ? x.fim || hoje : m), hoje); a1 = somaDias(a1, 30);
+  const W = 1040, lh = 34, ml = 230, mr = 20, H = itens.length * lh + 46, tot = Math.max(1, diasEntre(a0, a1));
+  const x = (d) => ml + (W - ml - mr) * (diasEntre(a0, d) / tot);
+  let g = "";
+  for (let d = new Date(a0 + "T12:00:00"); d.toISOString().slice(0, 10) <= a1; d.setMonth(d.getMonth() + (tot > 900 ? 6 : 3))) { const iso = d.toISOString().slice(0, 10); g += `<line x1="${x(iso)}" x2="${x(iso)}" y1="18" y2="${H - 8}" stroke="#e3e9ef"/><text x="${x(iso)}" y="12" text-anchor="middle" class="eixo-x">${rotuloMes(iso.slice(0, 7)).replace("/20", "/")}</text>`; }
+  itens.forEach((it, i) => {
+    const y = 26 + i * lh, f = it.fim || a1, venc = it.fim && diasEntre(hoje, it.fim) <= 60;
+    g += `<text x="${ml - 10}" y="${y + 15}" text-anchor="end" class="eixo-cat">${esc(it.c.forn.length > 30 ? it.c.forn.slice(0, 28) + "…" : it.c.forn)}</text>`;
+    g += `<rect x="${x(it.ini)}" y="${y + 3}" width="${Math.max(4, x(f) - x(it.ini))}" height="18" rx="5" fill="${venc ? "#d9663a" : "#0b5a8c"}" opacity="${it.fim ? 1 : 0.45}" data-tip="${esc(`${it.c.forn}\n${dataBR(it.ini)} a ${it.fim ? dataBR(it.fim) : "indeterminado"}${it.c.renovacaoAuto ? "\nrenovação automática" : ""}`)}"/>`;
+    if (it.c.avisoDias && it.fim) { const av = somaDias(it.fim, -it.c.avisoDias); g += `<line x1="${x(av)}" x2="${x(av)}" y1="${y}" y2="${y + 24}" stroke="#fbb812" stroke-width="3" data-tip="${esc(`Último dia para avisar a não renovação: ${dataBR(av)}`)}"/>`; }
+  });
+  g += `<line x1="${x(hoje)}" x2="${x(hoje)}" y1="16" y2="${H - 6}" stroke="#eb1a30" stroke-width="2" stroke-dasharray="4 3"/><text x="${x(hoje) + 4}" y="${H - 8}" style="fill:#eb1a30;font-weight:700;font-size:11px">hoje</text>`;
+  return `<div class="card chart"><div class="cab-secao"><span class="eyebrow">Vigências</span><h2>Linha do tempo dos contratos</h2></div>
+    <div class="legenda" style="margin:8px 0 4px"><span><i style="background:#0b5a8c"></i>Vigente</span><span><i style="background:#d9663a"></i>Vence em até 60 dias</span><span><i style="background:#fbb812"></i>Prazo para avisar a não renovação</span><span><i class="linha" style="background:#eb1a30"></i>Hoje</span></div>
+    <div class="grafico-largo"><svg class="g" viewBox="0 0 ${W} ${H}" role="img" aria-label="Vigência de cada contrato">${g}</svg></div></div>`;
+}
 function fichaContrato(c) {
   const an = analisarContrato(c), fim = an.fim;
   const todosL = S.todos.flatMap((b) => lancDoContrato(c, b).map((d) => ({ ...d, mesBal: b.mes })));
@@ -1717,6 +1767,7 @@ document.addEventListener("submit", async (e) => {
 $("#bannerNovoVer").addEventListener("click", () => { marcarVisto(); location.hash = "#resumo"; });
 $("#bannerNovoFechar").addEventListener("click", marcarVisto);
 $("#btnGerarAta").addEventListener("click", gerarAta);
+document.addEventListener("input", (e) => { if (e.target.id === "ctBusca") { S.ctBusca = e.target.value; clearTimeout(S.tBusca); S.tBusca = setTimeout(() => { contratosTab(); const i = $("#ctBusca"); i.focus(); i.setSelectionRange(i.value.length, i.value.length); }, 250); } });
 document.addEventListener("change", (e) => { if (e.target.id === "ctArquivo" && e.target.files.length) { importarContrato(e.target.files[0]); e.target.value = ""; } });
 for (const id of ["#btnBackup", "#btnBackup2"]) $(id)?.addEventListener("click", baixarBackup);
 $("#regPessoa").addEventListener("change", pintarRegistros);
@@ -1753,6 +1804,7 @@ document.addEventListener("click", async (e) => {
   }
   // contratos
   const ce = t.closest("[data-ct-edit]"); if (ce) { S.ctEditando = ce.dataset.ctEdit; S.ctRascunho = null; contratosTab(); $("#fContrato").scrollIntoView({ block: "center" }); return; }
+  const cfl = t.closest("[data-ct-filtro]"); if (cfl) { S.ctFiltro = cfl.dataset.ctFiltro; contratosTab(); return; }
   if (t.closest("#ctCancelar")) { S.ctEditando = ""; S.ctRascunho = null; contratosTab(); return; }
   const cf = t.closest("[data-ct-ficha]"); if (cf) { S.ctFicha = S.ctFicha === cf.dataset.ctFicha ? "" : cf.dataset.ctFicha; contratosTab(); if (S.ctFicha) $("#ctFicha").scrollIntoView({ block: "start" }); return; }
   if (t.closest("#ctUsarLido")) { S.ctEditando = ""; S.ctRascunho = S.ctLido; const rev = $("#ctRevisao").innerHTML; contratosTab(); $("#fContrato").scrollIntoView({ block: "start" }); return; }
