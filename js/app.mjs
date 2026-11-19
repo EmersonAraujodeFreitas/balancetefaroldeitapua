@@ -1727,7 +1727,7 @@ function alertasSecur(c) {
   const dif = ms.filter((m) => m.st === "sem" && m.princ && !m.liquido && m.fee);
   if (dif.length) add("alta", "taxa descontada diferente do contrato", `Nos meses ${dif.map((m) => `${rotCurto(m.mes)} (descontado ${brl(m.fee)}, pelo contrato ${brl(m.feeEsp)})`).join("; ")}, a remuneração descontada não confere com ${String(c.securitizacao?.pct || 2.5).replace(".", ",")}% do valor das taxas.`, `Pedimos a prestação de contas da ${nome} desses meses, com o cálculo da remuneração descontada.`);
   const liq = ms.filter((m) => m.liquido);
-  if (liq.length) add("baixa", "receita lançada já líquida em alguns meses", `Em ${liq.map((m) => rotCurto(m.mes)).join(", ")}, o balancete lança só o valor líquido da ${nome}, sem mostrar a taxa e as tarifas descontadas. O cálculo bate com o contrato (${String(c.securitizacao?.pct || 2.5).replace(".", ",")}% + R$ ${String(c.securitizacao?.porTitulo || 3).replace(".", ",")} por boleto), mas o balancete deveria mostrar o bruto e os descontos.`, `Pedir à administradora que lance a receita da ${nome} pelo valor bruto, com a remuneração e as tarifas separadas, também nos meses ${liq.map((m) => rotCurto(m.mes)).join(", ")}.`);
+  if (liq.length) add("baixa", "receita lançada já líquida em alguns meses", `Em ${liq.map((m) => rotCurto(m.mes)).join(", ")}, o balancete lança só o valor líquido da ${nome}, sem mostrar a taxa e as tarifas descontadas. O cálculo bate com o contrato (${String(c.securitizacao?.pct || 2.5).replace(".", ",")}% + R$ ${String(c.securitizacao?.porTitulo || 3).replace(".", ",")} por boleto), mas o balancete deveria mostrar o bruto e os descontos.`, `A administradora pode lançar a receita da ${nome} pelo valor bruto, mostrando a remuneração e as tarifas descontadas, e corrigir os meses ${liq.map((m) => rotCurto(m.mes)).join(", ")}?`);
   const sem = ms.filter((m) => m.st === "ausente");
   if (sem.length) add("alta", "mês sem repasse das taxas", `Não há receita de taxa condominial nos balancetes de ${sem.map((m) => rotCurto(m.mes)).join(", ")}.`, `O repasse garantido da ${nome} desses meses foi feito? Em que data e valor?`);
   return out;
@@ -1786,8 +1786,7 @@ function fichaSecur(c) {
       <li class="ok"><span class="st-ct ok">Contrato</span><b>Receita garantida.</b> ${esc(`A ${c.forn} paga ao condomínio as taxas condominiais, o fundo de reserva e as cotas de água todo mês, 1 dia útil após o vencimento, mesmo que o condômino não pague. Em troca, fica com ${String(pct).replace(".", ",")}% do valor, R$ ${String(pt.toFixed(2)).replace(".", ",")} por boleto e com as multas, juros e encargos de quem atrasa. No período: ${brl(F)} de remuneração e ${brl(T)} de tarifas, ${G ? pct2((F + T) / G) : "—"} do bruto.`)}</li>
       ${alts.map((a) => `<li class="${a.sev === "alta" ? "sem" : a.sev === "media" ? "sem" : "agu"}"><span class="st-ct ${a.sev === "baixa" ? "agu" : "sem"}">${a.sev === "baixa" ? "Para saber" : "Precisa de resposta"}</span><b>${esc(a.titulo.replace(`Contrato de ${c.forn}: `, "").replace(/^./, (x) => x.toUpperCase()))}.</b> ${esc(a.detalhe)}</li>`).join("")}
     </ul></section>
-    <div class="cab-secao" style="margin-top:16px"><span class="eyebrow">Para questionar</span><h3>Perguntas ao síndico e à administradora</h3></div>
-    ${S.ctPerguntas.length ? `<ol class="perguntas-ct">${S.ctPerguntas.map((q) => `<li>${esc(q)}</li>`).join("")}</ol><div class="acoes"><button class="btn sec" type="button" id="ctCopiarPerg">Copiar perguntas</button></div>` : '<p class="muted">Nada a questionar.</p>'}
+    ${blocoAssembleia(c)}
     <details class="ct-dados"><summary>Dados completos do contrato</summary><dl class="ficha-dados">
       ${c.contratado ? `<div><dt>Razão social</dt><dd>${esc(c.contratado)}</dd></div>` : ""}${c.cnpj ? `<div><dt>CNPJ</dt><dd>${esc(c.cnpj)}</dd></div>` : ""}${c.assinatura ? `<div><dt>Assinado em</dt><dd>${dataBR(c.assinatura)}</dd></div>` : ""}
       ${(c.info || []).map((x) => `<div><dt>${esc(x.rot)}</dt><dd>${esc(x.txt)}</dd></div>`).join("")}
@@ -1869,8 +1868,7 @@ function fichaReceita(c) {
         ${aus.length ? `<li class="sem"><span class="st-ct sem">Sem explicação</span><b>Repasse não identificado.</b> ${esc(alertasReceita(c)[0]?.detalhe || "")}</li>` : `<li class="ok"><span class="st-ct ok">Confirmado pelos dados</span><b>Repasses identificados</b> em todos os meses.</li>`}
         ${c.multaRescisoria ? `<li class="agu"><span class="st-ct agu">Para saber</span><b>Rescisão.</b> ${esc(c.multaRescisoria)}${c.avisoDias ? ` Aviso prévio de ${c.avisoDias} dias.` : ""}</li>` : ""}
       </ul></section>
-    <div class="cab-secao" style="margin-top:16px"><span class="eyebrow">Para questionar</span><h3>Perguntas ao síndico e à administradora</h3></div>
-    ${perguntas.length ? `<ol class="perguntas-ct">${perguntas.map((q) => `<li>${esc(q)}</li>`).join("")}</ol><div class="acoes"><button class="btn sec" type="button" id="ctCopiarPerg">Copiar perguntas</button></div>` : '<p class="muted">Nada a questionar.</p>'}
+    ${blocoAssembleia(c)}
     <details class="ct-dados"><summary>Dados completos do contrato</summary><dl class="ficha-dados">
       ${c.cnpj ? `<div><dt>CNPJ do cessionário</dt><dd>${esc(c.cnpj)}</dd></div>` : ""}${c.assinatura ? `<div><dt>Assinado em</dt><dd>${dataBR(c.assinatura)}</dd></div>` : ""}
       <div><dt>Prazo</dt><dd>${c.prazoMeses ? `${c.prazoMeses} meses` : "—"}${c.renovacaoAuto ? " · renovação automática" : " · prorrogação só por termo aditivo"}</dd></div>
@@ -1878,6 +1876,86 @@ function fichaReceita(c) {
       <div><dt>Como o site acha o repasse</dt><dd>receitas do balancete com “${esc(normTxt(c.forn).split(/\s+/)[0])}”${c.filtro ? ` ou “${esc(c.filtro)}”` : ""} no histórico; use o campo “Contar só lançamentos com o texto” do cadastro se a administradora lançar com outro nome</dd></div>
     </dl>${ehAdmin() ? `<div class="acoes" style="margin-top:8px"><label class="btn sec"><input type="file" data-ct-reler="${c.id}" accept="application/pdf,.pdf,.docx,.txt,image/*" hidden>Atualizar com o PDF do contrato</label><span class="mini" id="ctRelerMsg"></span></div>` : ""}</details>
   </div>`;
+}
+// ---------------------------------------------------------------- cruzamento entre contratos e pauta para a assembleia
+const ehCobrancaJuridica = (c) => c && !ehReceita(c) && ((c.info || []).some((x) => x.rot === "Honorários de êxito") || /inadimpl|recupera/i.test(`${c.objeto || ""} ${c.tipo || ""}`));
+const dIni = (c) => (c && c.inicio ? (c.inicio.length === 10 ? c.inicio : c.inicio + "-01") : "");
+function cruzamentos(c) {
+  const lista = S.contratos || [], out = [];
+  const sec = lista.find((x) => x.securitizacao), jur = lista.find(ehCobrancaJuridica);
+  if (sec && jur && (c.id === sec.id || c.id === jur.id)) {
+    let Ej = null; try { Ej = explicarContrato(jur); } catch {}
+    const acima = Ej ? Ej.linhas.filter((l) => l.resto > 0) : [], semE = Ej ? Ej.comp.semExpl : 0, med = acima.length ? r2(acima.reduce((s2, l) => s2 + l.pc, 0) / acima.length) : 0;
+    const exito = (jur.info || []).find((x) => x.rot === "Honorários de êxito"), ms = securMeses(sec), F = r2(ms.reduce((s2, m) => s2 + (m.fee || 0) + (m.tar || 0), 0));
+    out.push({ outro: c.id === sec.id ? jur : sec, titulo: "Cobrança de inadimplentes contratada duas vezes",
+      txt: `Desde ${dataBR(dIni(sec))}, a ${sec.forn} garante as taxas e ficou com a cobrança dos inadimplentes: ela paga o condomínio mesmo sem receber, e fica com multas, juros e encargos de quem atrasa (custo no período: ${brl(F)}). O contrato da ${jur.forn}, de ${dataBR(dIni(jur))}, também é de "recuperação de inadimplência"${exito ? `, com honorários de êxito (${exito.txt})` : ""}. Com a securitização, o crédito em atraso passa a ser da ${sec.forn}, então não deveria haver cobrança de inadimplência paga pelo condomínio.${med ? ` Mesmo assim, a mensalidade da ${jur.forn} passou de ${brl(jur.valor)} para, em média, ${brl(med)} desde ${rotCurto(acima[0].mes)} (${brl(semE)} acima do contrato).` : ""}`,
+      perguntas: [
+        { tema: "Contratos", q: `Se as taxas estão garantidas pela ${sec.forn} desde ${rotuloMes(dIni(sec).slice(0, 7))}, que serviço de recuperação de inadimplência a ${jur.forn} presta ao condomínio, e por que o condomínio paga por ele?`, porque: `Os dois contratos cobrem a cobrança dos inadimplentes: a ${sec.forn} assumiu esse crédito e a ${jur.forn} foi contratada também para recuperá-lo.`, doc: `Relatório mensal de processos e cobranças da ${jur.forn} (previsto no contrato dela) e relatório de inadimplência da ${sec.forn}.` },
+        ...(semE > 0 ? [{ tema: "Valores", q: `Os ${brl(semE)} pagos à ${jur.forn} acima da mensalidade de ${brl(jur.valor)} são honorários de êxito? De quais cobranças, se o crédito em atraso pertence à ${sec.forn}?`, porque: `O contrato da ${jur.forn} diz que o êxito é pago pelos inadimplentes, não pelo condomínio, e as notas vêm de ${rotCurto(acima[0].mes)} a ${rotCurto(acima.at(-1).mes)} entre ${brl(Math.min(...acima.map((l) => l.pc)))} e ${brl(Math.max(...acima.map((l) => l.pc)))}.`, doc: `Composição de cada nota fiscal da ${jur.forn} desde ${rotCurto(acima[0].mes)}.` }] : []),
+        { tema: "Contratos", q: `A ${jur.forn} cobra inadimplentes em nome da ${sec.forn}? Se sim, quem paga esse serviço?`, porque: `O contrato da ${sec.forn} permite que ela contrate escritórios de cobrança, pagos com os encargos cobrados do devedor.`, doc: `Declaração da ${sec.forn} sobre os escritórios que cobram os inadimplentes do condomínio.` },
+      ] });
+  }
+  if (sec && (c.id === sec.id || (jur && c.id === jur.id))) {
+    const quem = (sec.info || []).find((x) => x.rot === "Quem assina");
+    const nomes = [jur, sec].filter(Boolean).map((x) => `${x.forn} (${dataBR(x.assinatura || dIni(x))})`).join(" e ");
+    out.push({ outro: null, titulo: "Aprovação em assembleia", txt: `Os contratos ${nomes} foram assinados pelo síndico nas semanas seguintes à assembleia de instalação.${quem ? ` No da ${sec.forn}, quem assina como securitizada é a Duos Síndicos 360 Ltda, empresa do síndico, e o condomínio aparece só como interveniente.` : ""} O próprio contrato da ${sec.forn} pede assembleia para aprovar a securitização.`,
+      perguntas: [
+        { tema: "Aprovação", q: `Em qual assembleia foram aprovadas a contratação da ${jur ? jur.forn : "assessoria jurídica"} e a securitização das taxas com a ${sec.forn}?`, porque: `Os dois contratos comprometem o condomínio por prazo longo (renovação automática) e o da ${sec.forn} exige aprovação em assembleia (cláusula 11ª).`, doc: "Atas das assembleias e lista de presença." },
+        ...(quem ? [{ tema: "Aprovação", q: `Por que quem assina o contrato da ${sec.forn} como securitizada é a Duos Síndicos 360 Ltda, e não o condomínio? A empresa do síndico recebe algum valor dessa operação?`, porque: "O crédito securitizado é do condomínio, mas a parte do contrato é a empresa do síndico; o condomínio só anui.", doc: `Contrato completo com a ${sec.forn}, anexos e eventuais aditivos, e declaração de que a Duos não recebe comissão.` }] : []),
+      ] });
+  }
+  if (sec && c.id === sec.id && sec.securitizacao?.desconto) {
+    const prazo = dIni(sec) ? somaDias(dIni(sec), 365) : "", ms = securMeses(sec).filter((m) => m.fee && m.gross && !m.liquido), ult = ms.at(-1);
+    const pctAtual = ult ? ult.fee / ult.gross : null;
+    out.push({ outro: null, titulo: "Desconto obrigatório para pagamento antecipado", txt: `O contrato exige que o condomínio aprove em assembleia um desconto de ${sec.securitizacao.desconto}% para quem paga antes do vencimento, em até 12 meses${prazo ? ` (até ${dataBR(prazo)})` : ""}; sem isso, a taxa da ${sec.forn} sobe 1 ponto.${pctAtual ? ` Em ${rotCurto(ult.mes)}, a taxa descontada ainda era ${pct2(pctAtual)}.` : ""}`,
+      perguntas: [{ tema: "Valores", q: `O desconto de ${sec.securitizacao.desconto}% para pagamento antecipado exigido pela ${sec.forn} foi aprovado? Se não, a taxa da ${sec.forn} vai subir de ${String(sec.securitizacao.pct || 2.5).replace(".", ",")}% para ${String((sec.securitizacao.pct || 2.5) + 1).replace(".", ",")}%?`, porque: `O prazo de 12 meses do contrato terminou${prazo ? ` em ${dataBR(prazo)}` : ""}.`, doc: "Ata que aprovou o desconto ou comunicado da Cerus Bank sobre a nova taxa." }] });
+  }
+  return out;
+}
+// perguntas para a assembleia: pergunta direta, o porquê com os números e o documento a pedir
+function pautaAssembleia(c) {
+  const P = [], add = (tema, q, porque, doc) => P.push({ tema, q, porque, doc });
+  if (c.securitizacao) {
+    for (const a of alertasSecur(c)) if (!/assinado por empresa do síndico/.test(a.titulo)) add(/taxa descontada/.test(a.titulo) ? "Valores" : "Prestação de contas", a.pergunta, a.detalhe, `Prestação de contas mensal da ${c.forn}.`);
+  } else if (ehReceita(c)) {
+    for (const a of alertasReceita(c)) add("Receitas", a.pergunta, a.detalhe, `Comprovantes de depósito de ${c.contratado || c.forn} e extrato bancário do condomínio.`);
+  } else {
+    let E; try { E = explicarContrato(c); } catch { E = null; }
+    if (E) {
+      const ref = c.numero ? ` nº ${c.numero}` : "", L = E.linhas;
+      for (const [nv, tit, txt] of E.ach) {
+        if (tit === "Valor acima do contrato") { const ac = L.filter((l) => l.resto > 0), med = r2(ac.reduce((s2, l) => s2 + l.pc, 0) / ac.length);
+          add("Valores", `Por que a ${c.forn} recebe, em média, ${brl(med)} por mês, se o contrato${ref} fixa ${brl(c.valor)}?`, `De ${rotCurto(ac[0].mes)} a ${rotCurto(ac.at(-1).mes)} foram pagos ${brl(E.comp.semExpl)} acima do contrato, sem aditivo, reajuste ou explicação nos balancetes.`, "Notas fiscais com a composição de cada valor e o aditivo ou a ata que autorizou o aumento."); }
+        else if (tit === "Pagamentos fora da mensalidade" && (E.comp.aSem > 0 || /exceto|salvo/.test(txt))) {
+          const ass = E.avs.filter((d) => /assembl/i.test(`${d.item} ${d.desc}`)).map((d) => (/(\d{2}\/\d{2}\/\d{4})/.exec(d.det || "") || [])[1]).filter(Boolean);
+          if (ass.length && /exceto|salvo/.test(txt)) add("Valores", `As assembleias de ${[...new Set(ass)].join(" e ")}, cobradas pela ${c.forn}, estão entre as 3 primeiras após a instalação? Se estão, por que foram cobradas?`, `O contrato cobra 40% do salário mínimo por assembleia, mas isenta as 3 primeiras após a assembleia de instalação, e essas foram logo depois dela.`, "Lista das assembleias realizadas desde a instalação e os recibos cobrados.");
+          if (E.comp.aSem > 0) add("Valores", `Quem autorizou os ${brl(E.comp.aSem)} pagos à ${c.forn} fora do contrato?`, txt, "Orçamentos, aprovação (ata ou autorização do síndico) e notas fiscais de cada serviço.");
+        }
+        else if (tit === "Competências sem pagamento") add("Prestação de contas", `As competências ${L.filter((l) => l.st === "ausente").map((l) => rotCurto(l.mes)).join(", ")} da ${c.forn} estão pagas? Em qual nota?`, txt, "Notas fiscais e comprovantes desses meses.");
+        else if (tit === "Mesma nota paga mais de uma vez") add("Valores", `Por que a mesma nota fiscal da ${c.forn} foi paga mais de uma vez?`, txt.replace(/\. Peça.*$/, "."), "Nota fiscal de cada pagamento ou comprovante de devolução.");
+        else if (tit === "Faturas parceladas") add("Valores", `Quanto falta pagar à ${c.forn} das faturas parceladas, e com quais encargos?`, txt, "Extrato do parcelamento: valor total, parcelas pagas e a pagar.");
+        else if (tit === "Valor cadastrado não confere com os pagamentos") add("Contratos", `Qual é o valor mensal do contrato com a ${c.forn} e o que ele cobre?`, txt, "Contrato e planilha de custos vigentes.");
+        else if (tit === "Competências informadas erradas") add("Prestação de contas", `A administradora pode corrigir no balancete a competência das notas da ${c.forn}?`, txt, "Balancete corrigido.");
+      }
+      if ((c.info || []).some((x) => x.rot === "Planilha de custos") && E.avs.some((d) => /administra/i.test(d.item || ""))) add("Valores", `Com base em que cláusula a ${c.forn} cobra taxa de administração, se a planilha de custos do contrato não tem esse item?`, `Foram pagos ${brl(r2(E.avs.filter((d) => /administra/i.test(d.item || "")).reduce((s2, d) => s2 + d.v, 0)))} com esse nome no período.`, "Cláusula do contrato ou aditivo que prevê a taxa.");
+    }
+  }
+  const cruz = cruzamentos(c);
+  for (const x of cruz) for (const p of x.perguntas) if (!P.some((y) => y.q === p.q)) P.push(p);
+  // a pergunta do cruzamento sobre os honorários de êxito já cobre a do valor acima do contrato
+  if (P.some((p) => /são honorários de êxito/.test(p.q))) { const i = P.findIndex((p) => /recebe, em média/.test(p.q)); if (i >= 0) { const g = P.splice(i, 1)[0]; const e = P.find((p) => /são honorários de êxito/.test(p.q)); e.porque = `${g.porque} ${e.porque}`; e.doc = g.doc; } }
+  const ordem = ["Aprovação", "Contratos", "Valores", "Receitas", "Prestação de contas"];
+  P.sort((a, b) => ordem.indexOf(a.tema) - ordem.indexOf(b.tema));
+  S.ctPauta = P; S.ctPerguntas = P.map((p) => p.q);
+  return { cruz, P };
+}
+function blocoAssembleia(c) {
+  const { cruz, P } = pautaAssembleia(c);
+  return `${cruz.length ? `<section class="cruz-ct"><div class="cab-secao"><span class="eyebrow">Cruzamento com outros contratos</span><h3>O que os contratos mostram juntos</h3></div>
+      <ul class="achados">${cruz.map((x) => `<li class="sem"><span class="st-ct sem">Precisa de resposta</span><b>${esc(x.titulo)}.</b> ${esc(x.txt)}${x.outro ? ` <button type="button" class="link-btn" data-ct-ficha="${x.outro.id}">Ver ${esc(x.outro.forn)}</button>` : ""}</li>`).join("")}</ul></section>` : ""}
+    <div class="cab-secao" style="margin-top:16px"><span class="eyebrow">Para a assembleia</span><h3>Perguntas ao síndico e à administradora</h3></div>
+    ${P.length ? `<ol class="pauta-ct">${P.map((p) => `<li><span class="tema">${esc(p.tema)}</span><p class="q">${esc(p.q)}</p><p><b>Por quê:</b> ${esc(p.porque)}</p><p><b>Pedir:</b> ${esc(p.doc)}</p></li>`).join("")}</ol>
+      <div class="acoes"><button class="btn sec" type="button" id="ctCopiarPerg">Copiar perguntas para a assembleia</button></div>` : '<p class="muted">Nada a questionar: os pagamentos conferem ou estão explicados.</p>'}`;
 }
 function alertasContratos(existentes) {
   const out = [];
@@ -1999,10 +2077,8 @@ function fichaContrato(c0) {
       ${alertasCt.length ? `<div class="ct-alertas"><h4>Andamento no Acompanhamento</h4><ul>${alertasCt.map((a) => { const r = S.acomp[a.chave] || {}; return `<li><span class="sit ${a.sit}">${SITUACOES[a.sit] || "Pendente"}</span> ${esc(a.titulo.replace(`Contrato de ${c.forn}: `, ""))}${r.resposta ? `<div class="mini">Resposta: ${esc(r.resposta)}</div>` : ""}</li>`; }).join("")}</ul><p class="mini">Esses pontos estão na aba Acompanhamento, com prazo, responsável e histórico.</p></div>` : ""}
     </section>
 
-    <div class="cab-secao" style="margin-top:16px"><span class="eyebrow">Para questionar</span><h3>Perguntas ao síndico e à administradora</h3></div>
-    ${perguntas.length ? `<ol class="perguntas-ct">${perguntas.map((q) => `<li>${esc(q)}</li>`).join("")}</ol>
-      <div class="acoes"><button class="btn sec" type="button" id="ctCopiarPerg">Copiar perguntas</button>${avisoData && pode() ? `<button class="btn sec" type="button" data-ct-agenda="${c.id}">Pôr o prazo de aviso na agenda</button>` : ""}</div>`
-      : `<p class="muted">Nada a questionar: os pagamentos conferem ou estão explicados.</p>`}
+    ${blocoAssembleia(c)}
+    ${avisoData && pode() ? `<div class="acoes"><button class="btn sec" type="button" data-ct-agenda="${c.id}">Pôr o prazo de aviso na agenda</button></div>` : ""}
 
     <details class="ct-dados"><summary>Dados completos do contrato</summary>
       <dl class="ficha-dados">
@@ -2489,7 +2565,7 @@ document.addEventListener("click", async (e) => {
   if (t.closest("#ctCancelar")) { S.ctEditando = ""; S.ctRascunho = null; contratosTab(); return; }
   const cf = t.closest("[data-ct-ficha]"); if (cf) { S.ctFicha = S.ctFicha === cf.dataset.ctFicha ? "" : cf.dataset.ctFicha; contratosTab(); if (S.ctFicha) $("#ctFicha").scrollIntoView({ block: "start" }); return; }
   if (t.closest("#ctUsarLido")) { S.ctEditando = ""; S.ctRascunho = S.ctLido; const rev = $("#ctRevisao").innerHTML; contratosTab(); $("#fContrato").scrollIntoView({ block: "start" }); return; }
-  if (t.closest("#ctCopiarPerg")) { const txt = (S.ctPerguntas || []).map((q, i) => `${i + 1}. ${q}`).join("\n\n"); navigator.clipboard.writeText(txt).then(() => toast("Perguntas copiadas."), () => toast("Não foi possível copiar; selecione o texto.")); return; }
+  if (t.closest("#ctCopiarPerg")) { const txt = (S.ctPauta && S.ctPauta.length ? S.ctPauta.map((p, i) => `${i + 1}. ${p.q}\n   Por quê: ${p.porque}\n   Pedir: ${p.doc}`) : (S.ctPerguntas || []).map((q, i) => `${i + 1}. ${q}`)).join("\n\n"); navigator.clipboard.writeText(txt).then(() => toast("Perguntas copiadas."), () => toast("Não foi possível copiar; selecione o texto.")); return; }
   const cag = t.closest("[data-ct-agenda]");
   if (cag && pode()) {
     const c = S.contratos.find((x) => x.id === cag.dataset.ctAgenda), fim = fimContrato(c), data = somaDias(fim, -(c.avisoDias || 30)), id = "ag:" + novoId();
