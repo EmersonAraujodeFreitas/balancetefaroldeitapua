@@ -1880,6 +1880,21 @@ function fichaReceita(c) {
 // ---------------------------------------------------------------- cruzamento entre contratos e pauta para a assembleia
 const ehCobrancaJuridica = (c) => c && !ehReceita(c) && ((c.info || []).some((x) => x.rot === "Honorários de êxito") || /inadimpl|recupera/i.test(`${c.objeto || ""} ${c.tipo || ""}`));
 const dIni = (c) => (c && c.inicio ? (c.inicio.length === 10 ? c.inicio : c.inicio + "-01") : "");
+// a empresa também é contratada de outra (ex.: escritório que cobra para a securitizadora), informado no cadastro
+function trabalhaPara(c, outro) { if (!c || !outro || !c.trabalhaPara) return false; const a = normTxt(c.trabalhaPara), b = normTxt(outro.forn); return a.includes(b.split(/\s+/)[0]) || b.includes(a.split(/\s+/)[0]); }
+// os valores pagos acima do contrato: quanto pode ter explicação e quanto não tem
+function vereditoExcedente(c, E) {
+  if (!E) return null;
+  const acima = E.linhas.filter((l) => l.resto > 0), literal = r2(acima.reduce((s2, l) => s2 + l.resto, 0));
+  const doisSM = (mes) => 2 * salMin(+mes.slice(0, 4));
+  const favoravel = r2(acima.reduce((s2, l) => s2 + Math.max(0, l.pc - Math.max(l.dev, doisSM(l.mes))), 0));
+  let multas = 0;
+  for (const l of acima) for (const d of l.P) { const pg = isoBR(d.baixa); if (!c.diaVenc || !pg) continue; const venc = `${mesMais(l.mes, 1)}-${String(Math.min(c.diaVenc, 28)).padStart(2, "0")}`, at = diasEntre(venc, pg); if (at > 0) multas += l.dev * (0.02 + 0.01 * at / 30); }
+  multas = r2(multas);
+  const assIsentas = (c.adicionais || []).some((x) => /exceto|salvo/.test(x.desc)) ? r2(E.avs.filter((d) => /assembl/i.test(`${d.item} ${d.desc}`)).reduce((s2, d) => s2 + d.v, 0)) : 0;
+  const cart = r2(E.avs.filter((d) => /cartor|registro|custas/.test(normTxt(`${d.item} ${d.desc}`))).reduce((s2, d) => s2 + d.v, 0));
+  return { literal, favoravel, multas, assIsentas, cart, de: acima[0]?.mes, ate: acima.at(-1)?.mes, minInd: r2(Math.max(0, favoravel - multas) + assIsentas), maxInd: r2(literal + assIsentas) };
+}
 function cruzamentos(c) {
   const lista = S.contratos || [], out = [];
   const sec = lista.find((x) => x.securitizacao), jur = lista.find(ehCobrancaJuridica);
@@ -1887,6 +1902,19 @@ function cruzamentos(c) {
     let Ej = null; try { Ej = explicarContrato(jur); } catch {}
     const acima = Ej ? Ej.linhas.filter((l) => l.resto > 0) : [], semE = Ej ? Ej.comp.semExpl : 0, med = acima.length ? r2(acima.reduce((s2, l) => s2 + l.pc, 0) / acima.length) : 0;
     const exito = (jur.info || []).find((x) => x.rot === "Honorários de êxito"), ms = securMeses(sec), F = r2(ms.reduce((s2, m) => s2 + (m.fee || 0) + (m.tar || 0), 0));
+    const dupla = trabalhaPara(jur, sec);
+    if (dupla) {
+      const V = vereditoExcedente(jur, Ej);
+      out.push({ outro: c.id === sec.id ? jur : sec, titulo: "Cobrança de inadimplentes paga duas vezes",
+        txt: `O conselho registrou que a ${jur.forn} também é contratada da ${sec.forn} para cobrar os inadimplentes do condomínio${jur.trabalhaParaObs ? ` (${jur.trabalhaParaObs})` : ""}. Pelo contrato da ${sec.forn}, esse trabalho é pago com os encargos cobrados do devedor (15% do 11º ao 30º dia e 20% depois ou na via judicial), por meio de nota fiscal do escritório (cláusulas 2ª, §7º, e 5ª, §4º e §5º). O próprio contrato da ${jur.forn} diz que os honorários de êxito são "repasses e não despesas do contratante" (cláusula 7ª, §1º). Assim, o que o condomínio pagou à ${jur.forn} acima da mensalidade de ${brl(jur.valor)} (${brl(semE)} de ${acima.length ? rotCurto(acima[0].mes) : "—"} a ${acima.length ? rotCurto(acima.at(-1).mes) : "—"}) não tem base no contrato e, se for pela cobrança, é pagamento em duplicidade.`,
+        veredito: V, jur,
+        perguntas: [
+          ...(semE > 0 ? [{ tema: "Valores", q: `A ${jur.forn} vai devolver ou descontar nas próximas notas os ${brl(semE)} pagos pelo condomínio acima da mensalidade, já que a cobrança dos inadimplentes é paga pela ${sec.forn}?`, porque: `De ${rotCurto(acima[0].mes)} a ${rotCurto(acima.at(-1).mes)} as notas ficaram entre ${brl(Math.min(...acima.map((l) => l.pc)))} e ${brl(Math.max(...acima.map((l) => l.pc)))}, contra ${brl(jur.valor)} do contrato, sem aditivo nem explicação nos balancetes.`, doc: `Composição de cada nota da ${jur.forn} desde ${rotCurto(acima[0].mes)} e proposta de devolução ou compensação.` }] : []),
+          { tema: "Contratos", q: `Quanto a ${sec.forn} pagou à ${jur.forn} pela cobrança dos inadimplentes do condomínio desde ${rotuloMes(dIni(sec).slice(0, 7))}?`, porque: `Se o escritório recebe da ${sec.forn} e também do condomínio pela mesma cobrança, o condomínio está pagando em duplicidade.`, doc: `Contrato entre a ${sec.forn} e a ${jur.forn} e as notas fiscais emitidas para a ${sec.forn}.` },
+          { tema: "Contratos", q: `Como o condomínio fica protegido se o mesmo escritório trabalha para a ${sec.forn}, dona da dívida dos inadimplentes, e para o condomínio?`, porque: `Há conflito de interesse: a ${jur.forn} assessora o condomínio e cobra em nome da ${sec.forn}, cujo contrato foi assinado pela empresa do síndico.`, doc: `Declaração da ${jur.forn} sobre os contratos que mantém com a ${sec.forn} e com a Duos Síndicos 360.` },
+          { tema: "Contratos", q: `O contrato com a ${jur.forn} deve ser revisto em assembleia, tirando a "recuperação de inadimplência" e ajustando o valor, ou encerrado?`, porque: `Essa parte do contrato deixou de ter função com a securitização. Encerrar antes do prazo obriga a pagar honorários sobre os processos em andamento (15%) e encerrados com sentença ou acordo (20%).`, doc: `Lista dos processos em andamento patrocinados pela ${jur.forn} para o condomínio.` },
+        ] });
+    } else
     out.push({ outro: c.id === sec.id ? jur : sec, titulo: "Cobrança de inadimplentes contratada duas vezes",
       txt: `Desde ${dataBR(dIni(sec))}, a ${sec.forn} garante as taxas e ficou com a cobrança dos inadimplentes: ela paga o condomínio mesmo sem receber, e fica com multas, juros e encargos de quem atrasa (custo no período: ${brl(F)}). O contrato da ${jur.forn}, de ${dataBR(dIni(jur))}, também é de "recuperação de inadimplência"${exito ? `, com honorários de êxito (${exito.txt})` : ""}. Com a securitização, o crédito em atraso passa a ser da ${sec.forn}, então não deveria haver cobrança de inadimplência paga pelo condomínio.${med ? ` Mesmo assim, a mensalidade da ${jur.forn} passou de ${brl(jur.valor)} para, em média, ${brl(med)} desde ${rotCurto(acima[0].mes)} (${brl(semE)} acima do contrato).` : ""}`,
       perguntas: [
@@ -1952,7 +1980,24 @@ function pautaAssembleia(c) {
 function blocoAssembleia(c) {
   const { cruz, P } = pautaAssembleia(c);
   return `${cruz.length ? `<section class="cruz-ct"><div class="cab-secao"><span class="eyebrow">Cruzamento com outros contratos</span><h3>O que os contratos mostram juntos</h3></div>
-      <ul class="achados">${cruz.map((x) => `<li class="sem"><span class="st-ct sem">Precisa de resposta</span><b>${esc(x.titulo)}.</b> ${esc(x.txt)}${x.outro ? ` <button type="button" class="link-btn" data-ct-ficha="${x.outro.id}">Ver ${esc(x.outro.forn)}</button>` : ""}</li>`).join("")}</ul></section>` : ""}
+      <ul class="achados">${cruz.map((x) => `<li class="sem"><span class="st-ct sem">Precisa de resposta</span><b>${esc(x.titulo)}.</b> ${esc(x.txt)}${x.outro ? ` <button type="button" class="link-btn" data-ct-ficha="${x.outro.id}">Ver ${esc(x.outro.forn)}</button>` : ""}</li>`).join("")}</ul>
+      ${cruz.filter((x) => x.veredito).map((x) => { const V = x.veredito, j = x.jur || c; return `<div class="veredito"><h4>Os valores pagos a mais são devidos?</h4>
+        <p class="vered-resp"><b>Pelos contratos e pelos balancetes, não.</b> Até a ${esc(j.forn)} comprovar a composição de cada nota e a cláusula que autoriza cada valor, o excedente deve ser tratado como indevido.</p>
+        <table class="vered-tab"><tbody>
+          <tr><td>Pago acima da mensalidade de ${brl(j.valor)} (${V.de ? rotCurto(V.de) : "—"} a ${V.ate ? rotCurto(V.ate) : "—"}), lendo o contrato ao pé da letra</td><td class="n neg">${brl(V.literal)}</td></tr>
+          <tr><td>Mesmo na leitura mais favorável ao escritório (mensalidade = 2 salários mínimos do ano)</td><td class="n neg">${brl(V.favoravel)}</td></tr>
+          ${V.assIsentas ? `<tr><td>Assembleias cobradas que podem estar entre as 3 isentas pelo contrato</td><td class="n neg">${brl(V.assIsentas)}</td></tr>` : ""}
+          <tr><td>Única parte com explicação possível: multa e juros por atraso (2% + 1% ao mês)</td><td class="n">até ${brl(V.multas)}</td></tr>
+          ${V.cart ? `<tr><td>Cartório e registro de atas: devidos se houver comprovante (reembolso previsto)</td><td class="n">${brl(V.cart)}</td></tr>` : ""}
+          <tr class="total"><td>Possivelmente indevido</td><td class="n neg">${brl(V.minInd)} a ${brl(V.maxInd)}</td></tr>
+        </tbody></table>
+        <h4>Decisão sugerida</h4>
+        <ol class="vered-passos"><li>Contestar por escrito já: pelo contrato do escritório, a prestação de contas sem resposta em 30 dias é dada como aceita.</li>
+          <li>Pedir em até 15 dias a composição de cada nota e os relatórios mensais de processos, que o contrato obriga.</li>
+          <li>Até a resposta, pagar só a mensalidade de ${brl(j.valor)}.</li>
+          <li>Sem comprovação: pedir a devolução ou o desconto nas próximas notas e levar à assembleia a revisão ou o encerramento do contrato (antes, pedir a lista de processos em andamento).</li></ol>
+        <p class="mini">Leitura dos documentos para apoiar a decisão do conselho; não substitui a orientação de um advogado.</p></div>`; }).join("")}
+      </section>` : ""}
     <div class="cab-secao" style="margin-top:16px"><span class="eyebrow">Para a assembleia</span><h3>Perguntas ao síndico e à administradora</h3></div>
     ${P.length ? `<ol class="pauta-ct">${P.map((p) => `<li><span class="tema">${esc(p.tema)}</span><p class="q">${esc(p.q)}</p><p><b>Por quê:</b> ${esc(p.porque)}</p><p><b>Pedir:</b> ${esc(p.doc)}</p></li>`).join("")}</ol>
       <div class="acoes"><button class="btn sec" type="button" id="ctCopiarPerg">Copiar perguntas para a assembleia</button></div>` : '<p class="muted">Nada a questionar: os pagamentos conferem ou estão explicados.</p>'}`;
@@ -1961,11 +2006,15 @@ function alertasContratos(existentes) {
   const out = [];
   for (const c of S.contratos || []) {
     if (ehReceita(c)) { out.push(...alertasReceita(c)); continue; }
+    const secC = (S.contratos || []).find((x) => x.securitizacao);
+    if (secC && trabalhaPara(c, secC)) { let Ej = null; try { Ej = explicarContrato(c); } catch {} const V = vereditoExcedente(c, Ej);
+      if (V && V.literal > 0) out.push({ sev: "alta", tipo: "Contrato", titulo: `Contrato de ${c.forn}: valores pagos a mais pela cobrança já paga pela ${secC.forn}`, detalhe: `A ${c.forn} também é contratada da ${secC.forn} para cobrar os inadimplentes, trabalho pago com os encargos do devedor. O condomínio pagou ${brl(V.literal)} acima da mensalidade de ${brl(c.valor)} (${rotCurto(V.de)} a ${rotCurto(V.ate)}); possivelmente indevido: ${brl(V.minInd)} a ${brl(V.maxInd)}.`, pergunta: `A ${c.forn} vai devolver ou descontar nas próximas notas os ${brl(V.literal)} pagos acima da mensalidade, já que a cobrança dos inadimplentes é paga pela ${secC.forn}?`, ids: [], mes: V.ate, forn: c.forn, ct: c.id }); }
     let E; try { E = explicarContrato(c); } catch { continue; }
     const ids = (f) => E.linhas.filter(f).flatMap((l) => [...l.P, ...l.A].map((d) => d.id));
     const ultMes = (f) => (E.linhas.filter(f).at(-1) || E.linhas.at(-1) || {}).mes || null;
     const add = (sev, nome, detalhe, pergunta, idsA, mes) => out.push({ sev, tipo: "Contrato", titulo: `Contrato de ${c.forn}: ${nome}`, detalhe, pergunta, ids: idsA, mes, forn: c.forn, ct: c.id });
     for (const [nv, tit, txt] of E.ach) {
+      if (tit === "Valor acima do contrato" && secC && trabalhaPara(c, secC)) continue;
       if (tit === "Valor acima do contrato") add("alta", "mensalidade paga acima do contrato", txt, (S.ctPerguntasDe?.(E) || [])[0] || `Qual o documento que autoriza pagar ${brl(E.comp.semExpl)} acima da mensalidade de ${brl(c.valor)} a ${c.forn}?`, ids((l) => l.resto > 0), ultMes((l) => l.resto > 0));
       else if (tit === "Competências sem pagamento") add("media", "competências sem pagamento", txt, `As competências ${E.linhas.filter((l) => l.st === "ausente").map((l) => rotCurto(l.mes)).join(", ")} de ${c.forn} estão quitadas? Em qual nota?`, [], ultMes((l) => l.st === "ausente"));
       else if (tit === "Mesma nota paga mais de uma vez") { const idsD = ids((l) => l.ex.some((x) => /duplicidade/.test(x.txt))); if (!existentes.some((a) => (a.ids || []).some((i) => idsD.includes(i)) && /duplicidade|Documento fiscal/i.test(a.tipo))) add("alta", "mesma nota paga mais de uma vez", txt, `Apresentar a nota fiscal de cada pagamento a ${c.forn} ou o comprovante de devolução do valor pago em duplicidade.`, idsD, ultMes(() => true)); }
@@ -2132,6 +2181,8 @@ function formContrato(c) {
       <label>Multa por rescisão<input id="ctMultaR" value="${esc(c?.multaRescisoria || "")}" placeholder="ex.: 1 mensalidade"></label>
       <label>Valores avulsos previstos<input id="ctAdic" value="${esc(ad)}" placeholder="ex.: 50,00 por certidão; 40% SM acompanhamento em assembleia"></label>
       <label>Tolerância (%)<input id="ctTol" inputmode="decimal" value="${String(c?.tol ?? 2).replace(".", ",")}"></label>
+      <label>Também é contratada por (outra empresa)<input id="ctTrab" value="${esc(c?.trabalhaPara || "")}" placeholder="ex.: Cerus Bank"></label>
+      <label>Observação sobre essa relação<input id="ctTrabObs" value="${esc(c?.trabalhaParaObs || "")}" placeholder="ex.: informado pelo conselho"></label>
       <label>Contar só lançamentos com o texto<input id="ctFiltro" value="${esc(c?.filtro || "")}" placeholder="ex.: ASSESSORIA (opcional)"></label>
       <label>Link do contrato<input id="ctLink" type="url" value="${esc(c?.link || "")}" placeholder="https:// (Google Drive, opcional)"></label>
     </div>
@@ -2203,7 +2254,7 @@ function lerFormContrato() {
     tipo: $("#ctTipo").value.trim(), modalidade: $("#ctModal").value, valorTotal: parseValor($("#ctTotal").value) || null, parcelas: +$("#ctParc").value || null, formaPagamento: $("#ctFormaPg").value.trim(), multaRescisoria: $("#ctMultaR").value.trim(), indeterminado: $("#ctIndet").checked,
     diaVenc: +$("#ctDia").value || null, inicio: $("#ctIni").value, prazoMeses: +$("#ctPrazo").value || null, renovacaoAuto: $("#ctRenova").checked, fim: $("#ctFim").value,
     avisoDias: +$("#ctAviso").value || null, reajuste: $("#ctReaj").value.trim(), multa: $("#ctMulta").value.trim(), adicionais: adic, tol: parseValor($("#ctTol").value) || 2,
-    natureza: $("#ctNat").value, valorRegra: $("#ctRegra").value.trim(), filtro: $("#ctFiltro").value.trim(), link: urlValida($("#ctLink").value.trim()) ? $("#ctLink").value.trim() : "" };
+    natureza: $("#ctNat").value, valorRegra: $("#ctRegra").value.trim(), trabalhaPara: $("#ctTrab").value.trim(), trabalhaParaObs: $("#ctTrabObs").value.trim(), filtro: $("#ctFiltro").value.trim(), link: urlValida($("#ctLink").value.trim()) ? $("#ctLink").value.trim() : "" };
 }
 
 // ---------------------------------------------------------------- proposta de orçamento
