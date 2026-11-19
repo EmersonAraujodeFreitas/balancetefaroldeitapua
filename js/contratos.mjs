@@ -344,6 +344,29 @@ export function lerContrato(textoBruto, forns = []) {
     .map((x) => `${x[1].trim()} – ${x[2].trim()}`).filter((x, i, a) => a.indexOf(x) === i).slice(0, 30);
   if (!C.clausulas.length) C.clausulas = todos(/(?:^|\s)(\d{1,2})\.\s+([A-ZÀ-Ú][A-ZÀ-Ú ]{3,40}?)\s*:/g, t).map((x) => `${x[1]}. ${x[2].trim()}`).slice(0, 30);
 
+  // contrato de receita: o condomínio cede ou aluga um espaço e recebe (loja, mercadinho, antena, publicidade)
+  if (/cessao de (?:direito de )?uso|locacao de espaco|loja de conveniencia|cessao onerosa|permissao de uso/.test(n) && /condomini\w*[^.]{0,80}(?:-\s*)?\b(?:cedente|locador|permitente)\b|\b(?:cedente|locador|permitente)\b[^.]{0,40}condomini/.test(n)) {
+    C.natureza = "receita"; C.tipo = "Cessão de espaço (receita)"; C.modalidade = "mensal";
+    const q = /(\d+)\s*(?:\([^)]*\)\s*)?(?:taxas? condominia(?:l|is)|cotas? condominia(?:l|is))/.exec(n), q2 = /superar\s+(\d+)\s*%[^.]{0,160}?(\d+)\s*(?:\([^)]*\)\s*)?taxas? condominia/.exec(n);
+    const fixo = /(?:repasse|remunera\w*|aluguel|valor mensal)[^.]{0,120}?r\$\s?(\d{1,3}(?:\.\d{3})*,\d{2})/.exec(n);
+    if (q) { C.valorRegra = `${q[1]} ${+q[1] === 1 ? "taxa condominial" : "taxas condominiais"} por mês${q2 ? ` (${q2[2]} se a ocupação do condomínio passar de ${q2[1]}%)` : ""}`; C.valor = 0; C.valorTotal = null; C.parcelas = null; }
+    else if (fixo) C.valor = +fixo[1].replace(/\./g, "").replace(",", ".");
+    else C.valor = 0;
+    const ces = /([A-ZÀ-Ú0-9][A-ZÀ-Ú0-9 .&]{2,60}?(?:LTDA|S\/A|S\.A\.|EIRELI|ME)\.?)\s*[-–]\s*(?:CESSION[AÁ]RI[OA]|LOCAT[AÁ]RI[OA]|PERMISSION[AÁ]RI[OA])/.exec(t);
+    if (ces) C.contratado = ces[1].trim().replace(/^\d+\s+/, "");
+    const cnpjC = /(?:CESSION[AÁ]RI[OA]|LOCAT[AÁ]RI[OA])[^0-9]{0,40}(\d{2}\.\d{3}\.\d{3}\/\d{4}-\d{2})/.exec(t); if (cnpjC) C.cnpj = cnpjC[1];
+    const ob = /(?:instala\w*|explora\w*)\s+de\s+(?:uma\s+)?([^.;]{6,120}?)\s+para\s+a\s+explora/.exec(n) || /loja de conveniencia/.exec(n);
+    C.objeto = `cessão de uso de espaço${/m²|m2|metros quadrados/.test(t) ? ` (${(/(\d+)\s*m[²2]/.exec(t) || [])[1] || ""} m²)` : ""} para ${ob && ob[1] ? t.substr(ob.index + ob[0].indexOf(ob[1]), ob[1].length) : "loja de conveniência"}`.replace(" ( m²)", "");
+    C.multaRescisoria = (/multa compensatoria[^.]{0,200}?r\$\s?([\d.]+,\d{2})/.exec(n) ? `Rescisão antecipada sem motivo: multa até o valor investido pelo cessionário, limitada a R$ ${/multa compensatoria[^.]{0,200}?r\$\s?([\d.]+,\d{2})/.exec(n)[1]}${/reduzida progressivamente[^.]{0,40}?(\d+)\s*%/.test(n) ? `, reduzida ${/reduzida progressivamente[^.]{0,40}?(\d+)\s*%/.exec(n)[1]}% por ano cumprido` : ""}.` : C.multaRescisoria);
+    if (/energia|agua|internet/.test(n) && /reembols|medidor/.test(n)) info("Consumo", "Energia, água e internet do espaço são do cessionário, com medidor próprio e reembolso ao condomínio.");
+    if (/seguro/.test(n) && /cessionari/.test(n)) info("Seguro", "O cessionário deve manter seguro (incêndio, danos estruturais e responsabilidade civil) e apresentar a apólice quando pedido.");
+    const hor = /(\d{2})\s*\(vinte e quatro\)\s*horas|24\s*horas/.exec(n); if (hor) info("Funcionamento", "autoatendimento 24 horas, 7 dias por semana");
+    C.info = C.info.filter((x) => !["Quantidades e horários", "Incluído"].includes(x.rot));
+    const ass = /([a-zà-ú]+)\/?[a-z]{0,2},\s*(\d{1,2})\s+de\s+([a-zç]+)\s+de\s+(\d{4})/i.exec(t.slice(-3000));
+    if (ass && MESES_N[ctNorm(ass[3])]) { const iso = `${ass[4]}-${String(MESES_N[ctNorm(ass[3])]).padStart(2, "0")}-${ass[2].padStart(2, "0")}`; C.assinatura = C.assinatura || iso; C.inicio = C.inicio || iso; }
+    if (/a contar do ato de assinatura|a partir da assinatura/.test(n) && C.assinatura) C.inicio = C.assinatura;
+    if (/prorrogad\w* automaticamente, mediante termo aditivo/.test(n)) C.renovacaoAuto = false;
+  }
   if (C.info.some((x) => x.rot === "Planilha de custos")) {
     const k = C.info.findIndex((x) => x.rot === "Retenções"); C.info = C.info.filter((x, i) => x.rot !== "Retenções" || i === k);
     if (!C.tipo || /Seguro|Assessoria/.test(C.tipo)) { C.tipo = "Mão de obra terceirizada"; const qf = /total de funcionarios\s*(\d{1,3})/.exec(n); if (!C.objeto || /seguro/i.test(C.objeto)) C.objeto = `terceirização de mão de obra${qf ? ` (${qf[1]} funcionários)` : ""}`; }

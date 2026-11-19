@@ -1321,6 +1321,7 @@ function devidoNoMes(c, mes) {
 function fimContrato(c) { if (c.indeterminado) return ""; if (c.prazoMeses && c.inicio && c.inicio.length === 10) { const v = fimVigente(c.inicio, c.prazoMeses, c.renovacaoAuto, hojeISO()); if (v) return v.fim; } return c.fim || ""; }
 const refIso = (ref) => { const m = /^(\d{2})\/(\d{4})$/.exec(String(ref || "").trim()); return m ? `${m[2]}-${m[1]}` : ""; };
 function analisarContrato(c) {
+  if (ehReceita(c)) return analisarReceita(c);
   c = ctEf(c);
   const hoje = hojeISO(), tol = (c.tol ?? 2) / 100, fim = fimContrato(c);
   const ms = S.todos.filter((b) => (!c.inicio || b.mes >= ctIniMes(c)) && (!fim || b.mes <= fim.slice(0, 7)));
@@ -1343,7 +1344,7 @@ function contratosTab() {
   const el = $("#secContratos"); if (!el) return;
   const adm = ehAdmin(), lista = S.contratos || [], an = lista.map((c) => ({ c, ...analisarContrato(c) }));
   const ultMes = S.todos.at(-1)?.mes, divUlt = an.filter((x) => x.ult && x.ult.mes === ultMes && x.ult.st !== "ok");
-  const venc = an.filter((x) => x.venceEm !== null && x.venceEm <= 60), excesso = an.reduce((s2, x) => s2 + Math.max(0, x.dif), 0);
+  const venc = an.filter((x) => x.venceEm !== null && x.venceEm <= 60), excesso = an.filter((x) => !ehReceita(x.c)).reduce((s2, x) => s2 + Math.max(0, x.dif), 0);
   const stTxt = (m) => !m ? "—" : m.st === "pago" ? `<span class="sit resolvido">Pago ${brl(m.p)}</span>` : m.st === "nada" ? `<span class="mini">sem cobrança</span>` : m.st === "ok" ? `<span class="sit resolvido">Conforme</span>` : m.st === "ausente" ? `<span class="sit pendente">Sem pagamento</span>` : `<span class="sit questionado">${m.p > m.dev ? "+" : ""}${brl(m.p - m.dev)}</span>`;
   const sug = adm ? sugestoesContrato() : [];
   el.innerHTML = `
@@ -1363,7 +1364,7 @@ function contratosTab() {
   <div class="ct-grid">${an.filter((x) => filtroCt(x)).map((x) => cartaoContrato(x, adm)).join("") || '<p class="muted">Nenhum contrato neste filtro.</p>'}</div>
   ${linhaDoTempo(an)}
   <p class="mini">Na faixa de meses de cada cartão, cada quadradinho é um mês pela data do pagamento: verde conforme, amarelo valor diferente do devido, vermelho sem pagamento, cinza sem cobrança. O primeiro e o último mês são proporcionais aos dias de vigência.</p>` : `<div class="vazio card">Nenhum contrato cadastrado.${adm ? " Importe o PDF do contrato, use o formulário abaixo ou as sugestões." : ""}</div>`}
-  <div id="ctFicha">${S.ctFicha && lista.find((c) => c.id === S.ctFicha) ? fichaContrato(lista.find((c) => c.id === S.ctFicha)) : ""}</div>
+  <div id="ctFicha">${S.ctFicha && lista.find((c) => c.id === S.ctFicha) ? (ehReceita(lista.find((c) => c.id === S.ctFicha)) ? fichaReceita : fichaContrato)(lista.find((c) => c.id === S.ctFicha)) : ""}</div>
   ${adm ? `<form class="card" id="fContrato" data-id="${S.ctEditando || ""}">${formContrato(lista.find((c) => c.id === S.ctEditando) || S.ctRascunho)}</form>
   ${sug.length ? `<div class="card"><div class="cab-secao"><span class="eyebrow">Sugestões</span><h2>Pagamentos que parecem contratos fixos</h2></div>
     <p class="small muted" style="margin:6px 0 10px">Fornecedores pagos quase todo mês com valor estável nos últimos 12 meses. Confira o valor no contrato antes de adicionar.</p>
@@ -1385,7 +1386,9 @@ function cartaoContrato({ c, meses, ult, venceEm, fim, divs, totDev, totPago, di
   const hoje = hojeISO(), ini = c.inicio ? (c.inicio.length === 10 ? c.inicio : c.inicio + "-01") : "";
   const prog = ini && fim ? Math.max(0, Math.min(1, diasEntre(ini, hoje) / Math.max(1, diasEntre(ini, fim)))) : null;
   const tolV = Math.max(1, totDev * ((c.tol ?? 2) / 100));
-  const est = ult && ult.st === "ausente" ? ["critico", `Sem pagamento em ${rotuloMes(ult.mes)}`]
+  const rec = ehReceita(c);
+  const est = rec ? (ult && ult.st === "ausente" ? ["critico", `Repasse não identificado em ${rotuloMes(ult.mes)}`] : divs ? ["atencao", `${divs} mês(es) sem repasse identificado`] : ["ok", "Repasses recebidos"])
+    : ult && ult.st === "ausente" ? ["critico", `Sem pagamento em ${rotuloMes(ult.mes)}`]
     : ult && ult.st === "dif" ? ["atencao", `${rotuloMes(ult.mes)}: ${ult.p > ult.dev ? "+" : ""}${brl(ult.p - ult.dev)}`]
     : dif > tolV ? ["atencao", `${brl(dif)} pagos acima`]
     : dif < -tolV && !(ehCumulativo(c) && venceEm !== null && venceEm > 0) ? ["atencao", `${brl(-dif)} a menos que o devido`]
@@ -1394,12 +1397,12 @@ function cartaoContrato({ c, meses, ult, venceEm, fim, divs, totDev, totPago, di
     <div class="ct-topo"><span class="eyebrow">${esc(c.tipo || "Contrato")}${c.numero ? ` · nº ${esc(c.numero)}` : ""}</span><span class="ct-est ${est[0]}">${esc(est[1])}</span></div>
     <h3>${esc(c.forn)}</h3>
     <p class="ct-obj">${esc(c.objeto || "")}</p>
-    <div class="ct-valor"><b>${c.modalidade && c.modalidade !== "mensal" ? esc(descreverValor(c)) : brl(c.valor)}</b>${!c.modalidade || c.modalidade === "mensal" ? "<span>/mês</span>" : ""}${c.diaVenc ? `<span class="mini"> · vence dia ${c.diaVenc}</span>` : ""}</div>
+    <div class="ct-valor"><b>${(c.modalidade && c.modalidade !== "mensal") || (!c.valor && c.valorRegra) ? esc(descreverValor(c)) : brl(c.valor)}</b>${(!c.modalidade || c.modalidade === "mensal") && (c.valor || !c.valorRegra) ? `<span>/mês${rec ? " a receber" : ""}</span>` : ""}${c.diaVenc ? `<span class="mini"> · vence dia ${c.diaVenc}</span>` : ""}</div>
     <div class="ct-vig"><div class="ct-vig-txt"><span>${ini ? dataBR(ini) : "início não informado"}</span><span>${fim ? dataBR(fim) : c.indeterminado ? "prazo indeterminado" : "sem fim"}</span></div>
       ${prog !== null ? `<div class="ct-barra"><span style="width:${prog * 100}%"></span></div>` : ""}
       <span class="mini ${venceEm !== null && venceEm <= 60 ? "neg" : ""}">${venceEm === null ? (c.renovacaoAuto ? "renovação automática" : "") : venceEm < 0 ? `vencido há ${-venceEm} dia(s)` : `vence em ${venceEm} dia(s)${c.renovacaoAuto ? " · renova automaticamente" : ""}`}</span></div>
-    <div class="ct-nums"><div><span>${ehCumulativo(c) ? "Valor do contrato" : "Devido"}</span><b>${brl(totDev)}</b></div><div><span>Pago</span><b>${brl(totPago)}</b></div><div><span>Diferença</span><b class="${dif > 0.01 ? "neg" : dif < -0.01 ? "pos" : ""}">${dif > 0 ? "+" : ""}${brl(dif)}</b></div></div>
-    <div class="ct-meses" aria-label="Pagamentos por mês">${meses.map((m) => `<i class="mchip ${m.st}" data-tip="${esc(`${rotuloMes(m.mes)}\nPago: ${brl(m.p)}\nDevido: ${brl(m.dev)}`)}"></i>`).join("")}<span class="mini">${divs} de ${meses.length} mês(es) com diferença</span></div>
+    <div class="ct-nums"><div><span>${rec ? "Esperado" : ehCumulativo(c) ? "Valor do contrato" : "Devido"}</span><b>${rec && !totDev ? "—" : brl(totDev)}</b></div><div><span>${rec ? "Recebido" : "Pago"}</span><b>${brl(totPago)}</b></div><div><span>Diferença</span><b class="${dif > 0.01 ? "neg" : dif < -0.01 ? "pos" : ""}">${dif > 0 ? "+" : ""}${brl(dif)}</b></div></div>
+    <div class="ct-meses" aria-label="Pagamentos por mês">${meses.map((m) => `<i class="mchip ${m.st}" data-tip="${esc(`${rotuloMes(m.mes)}\nPago: ${brl(m.p)}\nDevido: ${brl(m.dev)}`)}"></i>`).join("")}<span class="mini">${divs} de ${meses.length} mês(es) ${rec ? "sem repasse identificado" : "com diferença"}</span></div>
     ${c.filtro ? `<p class="mini">Conta só lançamentos com "${esc(c.filtro)}"</p>` : ""}
     <div class="acoes-lin"><button type="button" data-ct-ficha="${c.id}">${S.ctFicha === c.id ? "Fechar ficha" : "Ver ficha completa"}</button>${c.link ? `<a class="btn-link" href="${esc(c.link)}" target="_blank" rel="noopener noreferrer">📎 PDF</a>` : ""}${adm ? `<button type="button" data-ct-edit="${c.id}">Editar</button><button type="button" class="perigo" data-ct-del="${c.id}">Excluir</button>` : ""}</div>
   </article>`;
@@ -1674,9 +1677,109 @@ function explicarContrato(c0) {
 const ST_CT = { aceito: ["Aceito pelo conselho", "expl"], respondido: ["Respondido", "resp"], perguntado: ["Perguntado", "perg"], ok: ["Conforme", "ok"], explicado: ["Explicado", "expl"], parcial: ["Explicado em parte", "parc"], sem: ["Sem explicação", "sem"], ausente: ["Sem pagamento", "aus"], aguarda: ["Aguardando", "agu"], nada: ["—", "agu"], pago: ["Pago", "ok"], dif: ["Diferença", "sem"] };
 const NIVEL = { confirmado: ["Confirmado pelos dados", "ok"], provavel: ["Provável", "expl"], sem: ["Sem explicação", "sem"], info: ["Para saber", "agu"] };
 // conclusões de cada contrato viram alertas: entram em Alertas, Acompanhamento, Resumo, WhatsApp, parecer e ata
+// ---------------------------------------------------------------- contratos de receita (cessão de espaço, locação)
+const ehReceita = (c) => c && c.natureza === "receita";
+const RECEITA_PADRAO = /^(transf\. liquida - )?taxa condominial$|^taxa administracao$|^tarifas? (de cobranca|bancaria)$|^rendimento de aplicacao$|^cashback$/;
+function recebimentosDe(c, b) {
+  const toks = normTxt(`${c.forn} ${c.contratado || ""} ${c.filtro || ""}`).split(/[^a-z0-9]+/).filter((w) => w.length >= 4 && !["ltda", "eireli", "comercio", "servicos", "condominio"].includes(w));
+  return (b.receitas || []).filter((r) => { const t = normTxt(r.desc); return r.v > 0 && (toks.some((w) => t.includes(w)) || (c.filtro && t.includes(normTxt(c.filtro)))); });
+}
+const receitasAvulsas = (b) => (b.receitas || []).filter((r) => r.v > 0 && !RECEITA_PADRAO.test(normTxt(r.desc).trim()));
+function analisarReceita(c) {
+  const hoje = hojeISO(), tol = (c.tol ?? 2) / 100, fim = fimContrato(c), ini = ctIniMes(c);
+  const ms = S.todos.filter((b) => (!ini || b.mes >= ini) && (!fim || b.mes <= fim.slice(0, 7)));
+  const meses = ms.map((b) => { const rs = recebimentosDe(c, b), p = r2(rs.reduce((s2, r) => s2 + r.v, 0)), dev = c.valor ? devidoNoMes(c, b.mes) : 0;
+    const st = p ? (dev ? (Math.abs(p - dev) <= dev * tol ? "ok" : "dif") : "pago") : "ausente"; return { mes: b.mes, p, dev, st, rs, outras: receitasAvulsas(b).filter((r) => !rs.includes(r)) }; });
+  const totPago = r2(meses.reduce((s2, m) => s2 + m.p, 0)), totDev = r2(meses.reduce((s2, m) => s2 + m.dev, 0));
+  return { meses, ult: meses.at(-1), venceEm: fim ? diasEntre(hoje, fim) : null, fim, divs: meses.filter((m) => m.st === "ausente" || m.st === "dif").length, totDev, totPago, dif: r2(totPago - totDev), receita: true };
+}
+function alertasReceita(c) {
+  const an = analisarReceita(c), aus = an.meses.filter((m) => m.st === "ausente");
+  if (!aus.length) return [];
+  const regra = c.valor ? `${brl(c.valor)} por mês` : c.valorRegra || "o valor do contrato";
+  return [{ sev: "media", tipo: "Contrato", titulo: `Contrato de ${c.forn}: repasse da ${(c.tipo || "cessão").toLowerCase().replace(" (receita)", "")} não aparece nas receitas`,
+    detalhe: `O contrato prevê ${regra} a receber de ${c.contratado || c.forn} desde ${c.inicio ? dataBR(c.inicio.length === 10 ? c.inicio : c.inicio + "-01") : "o início"}, mas nenhuma receita com o nome do cessionário aparece nos balancetes de ${aus.map((m) => rotCurto(m.mes)).join(", ")}. As receitas do balancete vêm agrupadas (taxa condominial, rendimentos, cashback): se o repasse entrou junto com as taxas, ele não aparece separado.${(c.info || []).some((x) => x.rot === "Consumo") ? " Também não há reembolso de energia, água ou internet do espaço." : ""}`,
+    pergunta: `Em que datas e valores ${c.contratado || c.forn} pagou o repasse previsto (${regra}) e os reembolsos de consumo do espaço? Pedimos os comprovantes e que esses valores sejam lançados no balancete com histórico próprio.${c.valor ? "" : " Qual o valor da taxa condominial usado no cálculo?"}`,
+    ids: [], mes: aus.at(-1).mes, forn: c.forn, ct: c.id }];
+}
+function fichaReceita(c) {
+  const an = analisarReceita(c), fim = an.fim, ls = an.meses, avisoData = fim && c.avisoDias ? somaDias(fim, -c.avisoDias) : "";
+  const sel = ls.find((m) => m.mes === S.ctMesSel) || ls.find((m) => m.st === "ausente") || ls.at(-1);
+  const regra = c.valor ? `${brl(c.valor)} por mês` : c.valorRegra || "valor não informado";
+  const aus = ls.filter((m) => m.st === "ausente"), regs = ls.map((m) => S.acomp[`ctm:${c.id}:${m.mes}`] || {});
+  const stM = (m, i) => regs[i].status === "aceito" ? "aceito" : regs[i].resposta ? "respondido" : regs[i].status === "perguntado" && m.st === "ausente" ? "perguntado" : m.st === "ausente" ? "ausente" : m.st === "dif" ? "sem" : "ok";
+  const sts = ls.map(stM), nRec = ls.filter((m, i) => m.p || sts[i] === "aceito").length;
+  const chips = [["Remuneração", regra], ["Pagador", c.contratado || c.forn], ["Vigência", `${c.inicio ? dataBR(c.inicio.length === 10 ? c.inicio : c.inicio + "-01") : "—"} a ${fim ? dataBR(fim) : "indeterminado"}`], c.avisoDias ? ["Aviso para encerrar", `${c.avisoDias} dias`] : null, avisoData ? ["Avisar até", dataBR(avisoData)] : null].filter(Boolean);
+  const painel = (() => {
+    if (!sel) return "";
+    const i = ls.indexOf(sel), ant = ls[i - 1], prox = ls[i + 1], st = sts[i], reg = regs[i], k = `ctm:${c.id}:${sel.mes}`, b = S.todos.find((x) => x.mes === sel.mes);
+    return `<div class="mes-painel ${ST_CT[st][1]}" id="ctMesPainel">
+      <div class="mp-cab"><button type="button" class="mp-nav" data-ct-mes="${ant ? ant.mes : ""}" ${ant ? "" : "disabled"} aria-label="Mês anterior">‹</button>
+        <div><span class="eyebrow">Mês</span><h3>${rotuloMes(sel.mes)}</h3></div><span class="st-ct ${ST_CT[st][1]}">${st === "ausente" ? "Repasse não identificado" : st === "ok" ? "Recebido" : ST_CT[st][0]}</span>
+        <button type="button" class="mp-nav" data-ct-mes="${prox ? prox.mes : ""}" ${prox ? "" : "disabled"} aria-label="Próximo mês">›</button></div>
+      <div class="mp-grid">
+        <div class="mp-col">
+          <h4>Esperado x recebido</h4>
+          <ol class="ponte"><li class="base"><span>Esperado pelo contrato</span><b>${sel.dev ? brl(sel.dev) : esc(regra)}</b></li><li class="tot"><span>Recebido identificado</span><b>${brl(sel.p)}</b></li></ol>
+          <h4>Receitas do balancete de ${rotCurto(sel.mes)}</h4>
+          <ul class="pg-lista">${(b?.receitas || []).filter((r) => r.v > 0).map((r) => `<li class="pg-card${sel.rs.includes(r) ? "" : " ret"}"><div><b>${esc(r.desc)}</b><span>${brl(r.v)}</span></div><small>${sel.rs.includes(r) ? "identificada como repasse deste contrato" : RECEITA_PADRAO.test(normTxt(r.desc).trim()) ? "receita agrupada: não dá para saber se inclui o repasse" : "receita avulsa: confirme se é do cessionário"}</small></li>`).join("")}</ul>
+        </div>
+        <div class="mp-col">
+          <h4>${st === "ausente" ? "O que precisa de resposta" : "O que os dados mostram"}</h4>
+          <ul class="expl">
+            ${sel.p ? `<li class="e-ok">Receita com o nome do cessionário: ${sel.rs.map((r) => `${esc(r.desc)} ${brl(r.v)}`).join("; ")}.</li>` : `<li class="e-alerta">Nenhuma receita com o nome de ${esc(c.contratado || c.forn)} neste balancete.</li>`}
+            ${!sel.p ? `<li class="e-info">O balancete lança as receitas agrupadas (taxa condominial, rendimentos, cashback). Se o repasse entrou junto com as taxas, ele não aparece separado: peça o comprovante e que a administradora lance o repasse com histórico próprio.</li>` : ""}
+            ${sel.outras.length && !sel.p ? `<li class="e-info">Receitas avulsas neste mês que podem ser do cessionário: ${sel.outras.map((r) => `${esc(r.desc)} ${brl(r.v)}`).join("; ")}. Confirme a origem.</li>` : ""}
+            ${(c.info || []).some((x) => x.rot === "Consumo") ? `<li class="e-info">O contrato manda o cessionário reembolsar energia, água e internet do espaço${sel.outras.some((r) => /reembols/i.test(r.desc)) ? "; há um reembolso neste mês, confirme a origem" : "; nenhum reembolso aparece neste mês"}.</li>` : ""}
+            ${!c.valor ? `<li class="e-info">O contrato não fixa o valor em reais (${esc(c.valorRegra || "regra não informada")}). Informe o valor no cadastro para conferir mês a mês.</li>` : ""}
+            ${reg.resposta ? `<li class="e-resposta">Resposta registrada${reg.respondidoEm ? ` em ${dataBR(reg.respondidoEm)}` : ""}${reg.por ? ` por ${esc(reg.por)}` : ""}: “${esc(reg.resposta)}”${reg.status === "aceito" ? " — aceita pelo conselho." : ""}</li>` : ""}
+          </ul>
+          ${pode() ? `<div class="mp-resp"><h4>Resposta do síndico ou da administradora</h4>
+            <textarea id="ctmTxt" rows="3" placeholder="Ex.: repasse de R$ … recebido em …/…/…, lançado junto com as taxas">${esc(reg.resposta || "")}</textarea>
+            <div class="mp-resp-acoes"><select id="ctmSt">${[["", "Sem andamento"], ["perguntado", "Perguntado"], ["respondido", "Respondido"], ["aceito", "Recebimento confirmado"]].map(([v, t2]) => `<option value="${v}" ${(reg.status || "") === v ? "selected" : ""}>${t2}</option>`).join("")}</select>
+            <button type="button" class="btn" data-ctm-salvar="${k}">Salvar</button>${reg.ts ? `<span class="mini">salvo ${horaBR(reg.ts)}${reg.por ? ` por ${esc(reg.por)}` : ""}</span>` : ""}</div></div>` : ""}
+        </div></div></div>`;
+  })();
+  const pend = sts.filter((s2) => ["ausente", "perguntado", "respondido", "sem"].includes(s2)).length;
+  const perguntas = alertasReceita(c).map((a) => a.pergunta);
+  S.ctPerguntas = perguntas;
+  return `<div class="card ficha-ct ficha2">
+    <div class="cab"><div class="cab-secao"><span class="eyebrow">${esc(c.tipo || "Contrato de receita")}${c.numero ? ` · nº ${esc(c.numero)}` : ""}</span><h2>${esc(c.forn)}</h2></div><button type="button" class="link-x" data-ct-ficha="${c.id}" aria-label="Fechar">×</button></div>
+    <p class="ct-obj-l">${esc(c.objeto || "")} · <b>o condomínio recebe</b></p>
+    <div class="ct-chips">${chips.map(([k, v]) => `<span><small>${k}</small>${esc(v)}</span>`).join("")}</div>
+    <div class="placar">
+      <div><small>Meses de contrato</small><b>${ls.length}</b><span>nos balancetes carregados</span></div>
+      <div><small>Esperado</small><b>${an.totDev ? brl(an.totDev) : "—"}</b><span>${an.totDev ? "pelo valor cadastrado" : esc(c.valorRegra || "informe o valor no cadastro")}</span></div>
+      <div class="${an.totPago ? "pos" : ""}"><small>Recebido identificado</small><b>${brl(an.totPago)}</b><span>${nRec} mês(es) com repasse identificado ou confirmado</span></div>
+      <div class="${pend ? "neg" : "pos"}"><small>Sem repasse identificado</small><b>${pend}</b><span>mês(es) a confirmar com o síndico</span></div>
+    </div>
+    <section class="conc">
+      <div class="conc-cab"><div class="cab-secao"><span class="eyebrow">Recebimentos</span><h3>Mês a mês: clique num mês para ver as receitas do balancete</h3></div><span></span></div>
+      <div class="trilha" role="list">${ls.map((m, i) => `<button type="button" role="listitem" class="tri ${ST_CT[sts[i]][1]} ${m === sel ? "sel" : ""}" data-ct-mes="${m.mes}" aria-pressed="${m === sel}">
+        <span class="tri-bar"><i style="height:${m.p || sts[i] === "aceito" ? 100 : 6}%;background:${COR_CT[sts[i]]}"></i></span><span class="tri-mes">${rotCurto(m.mes)}</span><span class="tri-dif ${sts[i] === "ausente" ? "neg" : ""}">${m.p ? brl(m.p).replace(",00", "") : sts[i] === "aceito" ? "confirmado" : "não achado"}</span></button>`).join("")}</div>
+      <div class="trilha-leg legenda">${[["ok", "Recebido"], ["explicado", "Confirmado pelo conselho"], ["perguntado", "Perguntado"], ["respondido", "Respondido"], ["ausente", "Não identificado"]].map(([k2, t2]) => `<span><i style="background:${COR_CT[k2]}"></i>${t2}</span>`).join("")}</div>
+      ${painel}
+    </section>
+    <section class="diag-ct"><div class="cab-secao"><span class="eyebrow">Conclusões</span><h3>O que os dados mostram</h3></div>
+      <ul class="achados">
+        <li class="ok"><span class="st-ct ok">Contrato</span><b>Contrato de receita.</b> ${esc(`O condomínio cede ${c.objeto ? c.objeto.replace(/^cessão de uso de /, "") : "um espaço"} a ${c.contratado || c.forn} e recebe ${regra}. O cessionário paga o próprio consumo e o seguro do espaço.`)}</li>
+        ${aus.length ? `<li class="sem"><span class="st-ct sem">Sem explicação</span><b>Repasse não identificado.</b> ${esc(alertasReceita(c)[0]?.detalhe || "")}</li>` : `<li class="ok"><span class="st-ct ok">Confirmado pelos dados</span><b>Repasses identificados</b> em todos os meses.</li>`}
+        ${c.multaRescisoria ? `<li class="agu"><span class="st-ct agu">Para saber</span><b>Rescisão.</b> ${esc(c.multaRescisoria)}${c.avisoDias ? ` Aviso prévio de ${c.avisoDias} dias.` : ""}</li>` : ""}
+      </ul></section>
+    <div class="cab-secao" style="margin-top:16px"><span class="eyebrow">Para questionar</span><h3>Perguntas ao síndico e à administradora</h3></div>
+    ${perguntas.length ? `<ol class="perguntas-ct">${perguntas.map((q) => `<li>${esc(q)}</li>`).join("")}</ol><div class="acoes"><button class="btn sec" type="button" id="ctCopiarPerg">Copiar perguntas</button></div>` : '<p class="muted">Nada a questionar.</p>'}
+    <details class="ct-dados"><summary>Dados completos do contrato</summary><dl class="ficha-dados">
+      ${c.cnpj ? `<div><dt>CNPJ do cessionário</dt><dd>${esc(c.cnpj)}</dd></div>` : ""}${c.assinatura ? `<div><dt>Assinado em</dt><dd>${dataBR(c.assinatura)}</dd></div>` : ""}
+      <div><dt>Prazo</dt><dd>${c.prazoMeses ? `${c.prazoMeses} meses` : "—"}${c.renovacaoAuto ? " · renovação automática" : " · prorrogação só por termo aditivo"}</dd></div>
+      ${(c.info || []).map((x) => `<div><dt>${esc(x.rot)}</dt><dd>${esc(x.txt)}</dd></div>`).join("")}
+      <div><dt>Como o site acha o repasse</dt><dd>receitas do balancete com “${esc(normTxt(c.forn).split(/\s+/)[0])}”${c.filtro ? ` ou “${esc(c.filtro)}”` : ""} no histórico; use o campo “Contar só lançamentos com o texto” do cadastro se a administradora lançar com outro nome</dd></div>
+    </dl>${ehAdmin() ? `<div class="acoes" style="margin-top:8px"><label class="btn sec"><input type="file" data-ct-reler="${c.id}" accept="application/pdf,.pdf,.docx,.txt,image/*" hidden>Atualizar com o PDF do contrato</label><span class="mini" id="ctRelerMsg"></span></div>` : ""}</details>
+  </div>`;
+}
 function alertasContratos(existentes) {
   const out = [];
   for (const c of S.contratos || []) {
+    if (ehReceita(c)) { out.push(...alertasReceita(c)); continue; }
     let E; try { E = explicarContrato(c); } catch { continue; }
     const ids = (f) => E.linhas.filter(f).flatMap((l) => [...l.P, ...l.A].map((d) => d.id));
     const ultMes = (f) => (E.linhas.filter(f).at(-1) || E.linhas.at(-1) || {}).mes || null;
@@ -1826,13 +1929,15 @@ function formContrato(c) {
   return `<div class="cab-secao"><span class="eyebrow">${c && c.id ? "Editar" : "Novo"} contrato</span><h2>${c && c.id ? esc(c.forn) : c && c.forn ? "Conferir dados lidos do PDF" : "Cadastrar contrato"}</h2></div>
     ${c && c.origem ? `<p class="small muted">Lido de "${esc(c.origem)}". Confira cada campo antes de salvar.</p>` : ""}
     <div class="form" style="margin-top:12px">
-      <label>Fornecedor (como aparece nos balancetes)<input id="ctForn" list="listaForn" required value="${esc(c?.forn || "")}"></label>
+      <label>Fornecedor ou pagador (como aparece nos balancetes)<input id="ctForn" list="listaForn" required value="${esc(c?.forn || "")}"></label>
       <label>Nº do contrato<input id="ctNum" value="${esc(c?.numero || "")}"></label>
       <label>CNPJ<input id="ctCnpj" value="${esc(c?.cnpj || "")}"></label>
       <label>Objeto<input id="ctObj" value="${esc(c?.objeto || "")}" placeholder="ex.: portaria 24h"></label>
       <label>Tipo<input id="ctTipo" list="listaTiposCt" value="${esc(c?.tipo || "")}" placeholder="ex.: Limpeza e conservação"></label>
       <label>Modalidade de pagamento<select id="ctModal">${[["mensal", "Mensal"], ["parcelado", "Parcelado"], ["global", "Valor global (por medição/avulso)"], ["anual", "Anual"]].map(([k, t2]) => `<option value="${k}" ${(c?.modalidade || "mensal") === k ? "selected" : ""}>${t2}</option>`).join("")}</select></label>
-      <label>Valor mensal ou da parcela (R$)<input id="ctValor" inputmode="decimal" required value="${fmtValor(c?.valor || 0)}"></label>
+      <label>Natureza<select id="ctNat"><option value="despesa" ${ehReceita(c) ? "" : "selected"}>Despesa (o condomínio paga)</option><option value="receita" ${ehReceita(c) ? "selected" : ""}>Receita (o condomínio recebe: cessão de espaço, aluguel)</option></select></label>
+      <label>Valor mensal ou da parcela (R$)<input id="ctValor" inputmode="decimal" value="${fmtValor(c?.valor || 0)}" placeholder="deixe 0 se o contrato não fixa valor em reais"></label>
+      <label>Regra do valor (quando não é fixo)<input id="ctRegra" value="${esc(c?.valorRegra || "")}" placeholder="ex.: 2 taxas condominiais por mês"></label>
       <label>Valor total (R$)<input id="ctTotal" inputmode="decimal" value="${fmtValor(c?.valorTotal || 0)}" placeholder="para global, anual ou parcelado"></label>
       <label>Nº de parcelas<input id="ctParc" inputmode="numeric" value="${c?.parcelas || ""}"></label>
       <label>Forma de pagamento<input id="ctFormaPg" value="${esc(c?.formaPagamento || "")}" placeholder="ex.: boleto"></label>
@@ -1866,7 +1971,7 @@ async function importarContrato(f) {
     if (!C.contratado && !C.valor && !C.objeto) { msg(`Não consegui identificar os dados em "${f.name}" (${paginas} página(s)${ocr ? ", lida por reconhecimento de texto" : ""}). Preencha o formulário manualmente.`); return; }
     msg(`"${f.name}" lido (${paginas} página(s)${ocr ? ", por reconhecimento de texto: confira com atenção" : ""}).`);
     const fv = C.inicio && C.prazoMeses ? fimVigente(C.inicio, C.prazoMeses, C.renovacaoAuto, hojeISO()) : null;
-    S.ctLido = { ...C, forn: C.forn || C.contratado || "", tol: 2, origem: f.name, fim: C.fim || "", filtro: "", lidoEm: new Date().toISOString() };
+    S.ctLido = { ...C, forn: C.natureza === "receita" ? nomeFornecedor(C.contratado || "") : C.forn || C.contratado || "", tol: 2, origem: f.name, fim: C.fim || "", filtro: "", lidoEm: new Date().toISOString() };
     // sugere o filtro quando o fornecedor também recebe reembolsos (palavra principal do histórico das mensalidades)
     if (S.ctLido.forn && C.valor) {
       const ls2 = S.todos.flatMap((b) => b.despesas.filter((d) => d.forn === S.ctLido.forn));
@@ -1877,7 +1982,7 @@ async function importarContrato(f) {
     const linha = (rot, v, tr) => `<tr><th>${rot}</th><td>${v || '<span class="muted">não encontrado</span>'}</td><td class="mini">${tr ? `“…${esc(tr)}…”` : ""}</td></tr>`;
     rv.innerHTML = `<div class="tabela" style="margin-top:12px"><table class="revisao-ct"><tbody>
       ${linha("Contratado", esc(C.contratado || ""), r.trechos.contratado)}
-      ${linha("Fornecedor nos balancetes", C.forn ? `<b>${esc(C.forn)}</b>` : '<span class="neg">nenhum fornecedor parecido nos balancetes</span>')}
+      ${C.natureza === "receita" ? linha("Natureza", "<b>Receita</b>: o condomínio recebe deste contrato") : linha("Fornecedor nos balancetes", C.forn ? `<b>${esc(C.forn)}</b>` : '<span class="neg">nenhum fornecedor parecido nos balancetes</span>')}
       ${linha("Nº do contrato", esc(C.numero || ""), r.trechos.numero)}${linha("CNPJ", esc(C.cnpj || ""))}
       ${linha("Objeto", esc(C.objeto || ""), r.trechos.objeto)}
       ${linha("Tipo de contrato", esc(C.tipo || ""))}
@@ -1905,7 +2010,9 @@ const SAL_MIN = { 2023: 1320, 2024: 1412, 2025: 1518, 2026: 1621 };
 const salMin = (ano) => SAL_MIN[ano] || SAL_MIN[Math.max(...Object.keys(SAL_MIN).map(Number).filter((a) => a <= ano))] || SAL_MIN[2026];
 const txtAdic = (x) => x.pctSM ? `${x.pctSM}% do salário mínimo ${x.desc.startsWith("por ") ? x.desc : "por " + x.desc}` : `${brl(x.valor)} ${x.desc}`;
 function descreverValor(c) {
+  if (c && !c.valor && c.valorRegra) return c.valorRegra + (ehReceita(c) ? " (a receber)" : "");
   if (!c || (!c.valor && !c.valorTotal)) return "";
+  if (ehReceita(c)) return `${brl(c.valor)} por mês (a receber)`;
   if (c.modalidade === "parcelado") return `${c.valorTotal ? brl(c.valorTotal) + " em " : ""}${c.parcelas || "?"} parcela(s) de ${brl(c.valor)}`;
   if (c.modalidade === "global") return `${brl(c.valorTotal || c.valor)} (valor global)`;
   if (c.modalidade === "anual") return `${brl(c.valorTotal || c.valor * 12)} por ano (${brl(c.valor)}/mês)`;
@@ -1917,7 +2024,7 @@ function lerFormContrato() {
     tipo: $("#ctTipo").value.trim(), modalidade: $("#ctModal").value, valorTotal: parseValor($("#ctTotal").value) || null, parcelas: +$("#ctParc").value || null, formaPagamento: $("#ctFormaPg").value.trim(), multaRescisoria: $("#ctMultaR").value.trim(), indeterminado: $("#ctIndet").checked,
     diaVenc: +$("#ctDia").value || null, inicio: $("#ctIni").value, prazoMeses: +$("#ctPrazo").value || null, renovacaoAuto: $("#ctRenova").checked, fim: $("#ctFim").value,
     avisoDias: +$("#ctAviso").value || null, reajuste: $("#ctReaj").value.trim(), multa: $("#ctMulta").value.trim(), adicionais: adic, tol: parseValor($("#ctTol").value) || 2,
-    filtro: $("#ctFiltro").value.trim(), link: urlValida($("#ctLink").value.trim()) ? $("#ctLink").value.trim() : "" };
+    natureza: $("#ctNat").value, valorRegra: $("#ctRegra").value.trim(), filtro: $("#ctFiltro").value.trim(), link: urlValida($("#ctLink").value.trim()) ? $("#ctLink").value.trim() : "" };
 }
 
 // ---------------------------------------------------------------- proposta de orçamento
@@ -2211,7 +2318,7 @@ async function relerContrato(id, f) {
     if ((C.info || []).length) { novo.info = [...(C.info || []), ...(c.info || []).filter((x) => !(C.info || []).some((y) => y.rot === x.rot))]; mud.push("informações"); }
     if ((C.adicionais || []).length) { novo.adicionais = C.adicionais; mud.push("avulsos previstos"); }
     if ((C.clausulas || []).length) { novo.clausulas = C.clausulas; mud.push("cláusulas"); }
-    for (const k of ["multa", "reajuste", "multaRescisoria", "numero", "cnpj", "contratado", "assinatura", "objeto", "tipo", "formaPagamento", "diaVenc", "avisoDias"]) if (!c[k] && C[k]) { novo[k] = C[k]; mud.push(k); }
+    for (const k of ["natureza", "valorRegra", "multa", "reajuste", "multaRescisoria", "numero", "cnpj", "contratado", "assinatura", "objeto", "tipo", "formaPagamento", "diaVenc", "avisoDias"]) if (!c[k] && C[k]) { novo[k] = C[k]; mud.push(k); }
     if (C.valor && c.valor && Math.abs(C.valor - c.valor) > 0.01) mud.push(`atenção: o PDF diz ${brl(C.valor)}, o cadastro tem ${brl(c.valor)} (não alterado)`);
     novo.origem = f.name; novo.ts = new Date().toISOString(); novo.por = nomeUsuario();
     const antes = S.contratos; S.contratos = S.contratos.map((x) => (x.id === id ? novo : x));
@@ -2312,8 +2419,9 @@ document.addEventListener("submit", async (e) => {
     const dados = lerFormContrato();
     // fornecedor sempre com o nome padronizado usado nos balancetes
     const forns = porFornecedor(S.todos).map((x) => x.forn);
-    if (dados.forn && !forns.includes(dados.forn)) { const pad = nomeFornecedor(dados.forn); dados.forn = forns.includes(pad) ? pad : casarFornecedor(dados.forn, forns) || pad; }
-    if (!dados.forn || !dados.valor) return ($("#ctMsg").textContent = "Informe o fornecedor e o valor mensal.");
+    if (dados.forn && !forns.includes(dados.forn)) { const pad = nomeFornecedor(dados.forn); dados.forn = forns.includes(pad) || dados.natureza === "receita" ? pad : casarFornecedor(dados.forn, forns) || pad; }
+    if (!dados.forn) return ($("#ctMsg").textContent = dados.natureza === "receita" ? "Informe quem paga ao condomínio." : "Informe o fornecedor.");
+    if (!dados.valor && !dados.valorRegra && dados.natureza !== "receita" && !dados.valorTotal) return ($("#ctMsg").textContent = "Informe o valor mensal ou a regra do valor (ex.: 2 taxas condominiais).");
     const id = f.dataset.id || novoId();
     const lido = S.ctRascunho || {};
     const c = { ...(S.contratos.find((x) => x.id === id) || {}), ...(lido.info ? { info: lido.info, clausulas: lido.clausulas || [], assinatura: lido.assinatura || "", prazoDias: lido.prazoDias || null, contratado: lido.contratado || "" } : {}), ...dados, id, origem: S.ctRascunho?.origem || S.contratos.find((x) => x.id === id)?.origem || "", por: nomeUsuario(), ts: new Date().toISOString() };
