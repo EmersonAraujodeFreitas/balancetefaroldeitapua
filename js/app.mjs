@@ -1720,7 +1720,7 @@ function fichaReceita(c) {
       <div class="mp-grid">
         <div class="mp-col">
           <h4>Esperado x recebido</h4>
-          <ol class="ponte"><li class="base"><span>Esperado pelo contrato</span><b>${sel.dev ? brl(sel.dev) : esc(regra)}</b></li><li class="tot"><span>Recebido identificado</span><b>${brl(sel.p)}</b></li></ol>
+          <ol class="ponte"><li class="base${sel.dev ? "" : " regra"}"><span>Esperado pelo contrato</span><b>${sel.dev ? brl(sel.dev) : esc(regra)}</b></li><li class="tot"><span>Recebido identificado</span><b>${brl(sel.p)}</b></li></ol>
           <h4>Receitas do balancete de ${rotCurto(sel.mes)}</h4>
           <ul class="pg-lista">${(b?.receitas || []).filter((r) => r.v > 0).map((r) => `<li class="pg-card${sel.rs.includes(r) ? "" : " ret"}"><div><b>${esc(r.desc)}</b><span>${brl(r.v)}</span></div><small>${sel.rs.includes(r) ? "identificada como repasse deste contrato" : RECEITA_PADRAO.test(normTxt(r.desc).trim()) ? "receita agrupada: não dá para saber se inclui o repasse" : "receita avulsa: confirme se é do cessionário"}</small></li>`).join("")}</ul>
         </div>
