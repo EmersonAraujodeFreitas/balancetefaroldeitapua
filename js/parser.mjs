@@ -127,6 +127,7 @@ const ALIASES = [
   [/\bAF INSTALA/i, "AF Instalação, Manutenção e Construção"],
   [/FERIMPORT/i, "Ferimport Comércio, Representação e Importação"],
   [/VIP CASA DECOR/i, "VIP Casa Decor Comércio"],
+  [/CERUS/i, "Cerus Bank"],
 ];
 // acentos e palavras cortadas no PDF
 const ACENTOS = Object.fromEntries(("instalacao:instalação manutencao:manutenção construcao:construção construcoes:construções comercio:comércio servicos:serviços servico:serviço " +

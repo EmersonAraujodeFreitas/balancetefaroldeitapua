@@ -344,6 +344,35 @@ export function lerContrato(textoBruto, forns = []) {
     .map((x) => `${x[1].trim()} – ${x[2].trim()}`).filter((x, i, a) => a.indexOf(x) === i).slice(0, 30);
   if (!C.clausulas.length) C.clausulas = todos(/(?:^|\s)(\d{1,2})\.\s+([A-ZÀ-Ú][A-ZÀ-Ú ]{3,40}?)\s*:/g, t).map((x) => `${x[1]}. ${x[2].trim()}`).slice(0, 30);
 
+  // securitização / garantia de receita (ex.: Cerus Bank): a empresa antecipa as taxas condominiais e desconta a remuneração
+  if (/securitiza/.test(n) && /taxas? condominia/.test(n)) {
+    C.natureza = "receita"; C.tipo = "Securitização das taxas condominiais (receita garantida)"; C.modalidade = "mensal"; C.valor = 0; C.valorTotal = null; C.parcelas = null;
+    const pct = /percentual de (\d{1,2}(?:,\d+)?)\s*%[^.]{0,90}?valor liquido/.exec(n), tit = /r\$\s?(\d{1,3},\d{2})\s*\([^)]*\)\s*por cada titulo/.exec(n), desc = /desconto de (\d{1,2})\s*%/.exec(n);
+    C.securitizacao = { pct: pct ? +pct[1].replace(",", ".") : null, porTitulo: tit ? +tit[1].replace(",", ".") : null, desconto: desc ? +desc[1] : null };
+    C.valorRegra = `taxas condominiais garantidas todo mês, descontados ${pct ? pct[1] + "%" : "a remuneração"} do valor líquido${tit ? ` + R$ ${tit[1]} por boleto` : ""}`;
+    const emp = /([A-ZÀ-Ú]{3,} SECURITIZADORA[A-ZÀ-Ú ]{0,40}?S\.?\s?\/?A)\b/.exec(t);
+    C.contratado = emp ? emp[1].trim().replace(/\s+/g, " ") : C.contratado;
+    const cn = /SECURITIZADORA[\s\S]{0,400}?(\d{2}\.\d{3}\.\d{3}\/\d{4}-\d{2})/.exec(t); if (cn) C.cnpj = cn[1];
+    if (/cerusbank|cerus/i.test(t)) C.marca = "Cerus Bank";
+    C.objeto = "securitização (antecipação garantida) das taxas condominiais, fundo de reserva e cotas de água";
+    const ini = /a partir da competencia (\d{1,2}) de ([a-zç]+) de (\d{4})/.exec(n);
+    if (ini && MESES_N[ini[2]]) C.inicio = `${ini[3]}-${String(MESES_N[ini[2]]).padStart(2, "0")}-${ini[1].padStart(2, "0")}`;
+    const val = /validade inicial de (\d{1,3})\s*(?:\([^)]*\)\s*)?meses/.exec(n); if (val) C.prazoMeses = +val[1];
+    if (/renovado de maneira automatica por tempo indeterminado|renovacao automatica/.test(n)) { C.renovacaoAuto = true; C.indeterminado = false; }
+    const av = /antecedencia minima de (\d{1,3})\s*(?:\([^)]*\)\s*)?dias,?\s*a titulo de aviso/.exec(n) || /rescisao[^.]{0,160}?antecedencia minima de (\d{1,3})/.exec(n); if (av) C.avisoDias = +av[1];
+    const asss = [...t.matchAll(/\b([A-ZÀ-Ú][a-zà-ú]+(?:\s[A-ZÀ-Ú][a-zà-ú]+)?)\s*(?:\/[A-Z]{2})?,\s*(\d{1,2})\s+de\s+([a-zç]+)\s+de\s+(\d{4})/g)], ass = asss.at(-1);
+    if (ass && MESES_N[ctNorm(ass[3])]) C.assinatura = `${ass[4]}-${String(MESES_N[ctNorm(ass[3])]).padStart(2, "0")}-${ass[2].padStart(2, "0")}`;
+    delete C.numero; delete C.multaRescisoria; if (C.reajuste === "Reajuste") delete C.reajuste;
+    const sec = /([A-ZÀ-Ú0-9][A-ZÀ-Ú0-9 ]{3,60}?LTDA)(?:(?!LTDA)[\s\S]){0,500}?doravante denominad[ao] apenas SECURITIZAD[AO]/.exec(t);
+    C.info = [];
+    if (C.securitizacao.pct) info("Remuneração", `${String(C.securitizacao.pct).replace(".", ",")}% sobre o valor líquido das taxas${tit ? ` + R$ ${tit[1]} por boleto` : ""}, descontados do repasse; tarifas de transferência reembolsadas`);
+    if (desc) info("Desconto obrigatório", `${desc[1]}% para quem paga antes do vencimento; sem esse desconto aprovado em assembleia em 12 meses, a taxa sobe 1 ponto`);
+    if (/15%[^.]{0,80}11/.test(n) || /quinze por cento/.test(n)) info("Cobrança dos inadimplentes", "multa, juros e encargos ficam com a securitizadora; cobrança administrativa +15% (11º ao 30º dia) e +20% a partir do 31º dia ou na via judicial, pagos pelo condômino devedor");
+    info("Repasse", "1 dia útil após o vencimento do boleto, mesmo que o condômino não pague; outras cotas no mesmo boleto vão no 5º dia útil do mês seguinte; prestação de contas em até 15 dias");
+    info("O que não entra", "taxas extraordinárias, vouchers de restaurante e taxas de manutenção das unidades (precisam de aditivo)");
+    if (sec) info("Quem assina", `${sec[1].replace(/\s+/g, " ").trim()} assina como securitizada; o condomínio aparece só como interveniente/anuente, representado pelo síndico. A cláusula 11ª pede assembleia para aprovar a securitização.`);
+    info("Rescisão", "aviso de 60 dias; na saída, o condomínio devolve em 10 dias os valores antecipados e ainda não recuperados (ou desconto nos repasses, ou confissão de dívida em até 6 parcelas)");
+  } else
   // contrato de receita: o condomínio cede ou aluga um espaço e recebe (loja, mercadinho, antena, publicidade)
   if (/cessao de (?:direito de )?uso|locacao de espaco|loja de conveniencia|cessao onerosa|permissao de uso/.test(n) && /condomini\w*[^.]{0,80}(?:-\s*)?\b(?:cedente|locador|permitente)\b|\b(?:cedente|locador|permitente)\b[^.]{0,40}condomini/.test(n)) {
     C.natureza = "receita"; C.tipo = "Cessão de espaço (receita)"; C.modalidade = "mensal";
