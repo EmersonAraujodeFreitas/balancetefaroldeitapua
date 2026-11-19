@@ -51,12 +51,23 @@ export async function textoDoPdf(pdfjs, dados, progresso = () => {}) {
 }
 
 // ---------------------------------------------------------------- qualquer arquivo: PDF, Word (.docx), imagem ou texto
+// prints e fotos pequenas são ampliados (até ~2400 px de largura) e passados para tons de cinza: o OCR erra muito menos
+async function ampliar(fonte) {
+  if (!(fonte instanceof Blob) || typeof createImageBitmap !== "function") return fonte;
+  try {
+    const img = await createImageBitmap(fonte), k = Math.min(4, Math.max(1, 2400 / img.width));
+    if (k <= 1.05) return fonte;
+    const cv = document.createElement("canvas"); cv.width = Math.round(img.width * k); cv.height = Math.round(img.height * k);
+    const g = cv.getContext("2d"); g.imageSmoothingQuality = "high"; g.filter = "grayscale(1) contrast(1.15)"; g.drawImage(img, 0, 0, cv.width, cv.height);
+    return cv;
+  } catch { return fonte; }
+}
 async function ocrImagens(fontes, progresso) {
   progresso("Carregando o leitor de texto de imagens (pode levar um minuto)…");
   await carregarScript(TESS_URL);
   const worker = await window.Tesseract.createWorker("por", 1, { logger: (m) => { if (m.status === "recognizing text") progresso(`Reconhecendo texto: ${Math.round(m.progress * 100)}%`); } });
   let texto = "";
-  try { for (let i = 0; i < fontes.length; i++) { progresso(`Reconhecendo imagem ${i + 1} de ${fontes.length}…`); texto += (await worker.recognize(fontes[i])).data.text + "\n\n"; } }
+  try { for (let i = 0; i < fontes.length; i++) { progresso(`Reconhecendo imagem ${i + 1} de ${fontes.length}…`); texto += (await worker.recognize(await ampliar(fontes[i]))).data.text + "\n\n"; } }
   finally { await worker.terminate(); }
   return texto;
 }
@@ -204,6 +215,20 @@ export function lerContrato(textoBruto, forns = []) {
   else if (glob) { C.modalidade = "global"; C.valorTotal = glob.v; C.valor = glob.v; principal = glob; m = /(\d{1,3})\s*(?:\([^)]*\))?\s*(?:parcelas|prestacoes)/.exec(glob.depois); if (m) { C.parcelas = +m[1]; C.modalidade = "parcelado"; C.valor = Math.round(glob.v / C.parcelas * 100) / 100; } }
   else if (anual) { C.modalidade = "anual"; C.valorTotal = anual.v; C.valor = Math.round(anual.v / 12 * 100) / 100; principal = anual; }
   else { const x = valores.find((y) => !ehLimite(y) && !ehAvulso(y) && !ehMulta(y) && /pagara|valor|honorario|preco|remunera|importancia/.test(y.antes.slice(-120))); if (x) { C.modalidade = "mensal"; C.valor = x.v; principal = x; } }
+  // planilha de custos de terceirização: total mensal da prestação (bruto) e total após as retenções (líquido)
+  { const V = "(?:r\\$\\s*)?(\\d{1,3}(?:\\.\\d{3})*,\\d{2})", vNum = (x) => +x.replace(/\./g, "").replace(",", ".");
+    const br = um(new RegExp(`total da prestacao (?:dos|de) servicos\\s*:?\\s*${V}`)), liq = um(new RegExp(`total (?:dos|de) servicos\\s*(?:liquido)?\\s*:?\\s*${V}`));
+    if (br) {
+      C.modalidade = "mensal"; C.valor = vNum(br[1]); principal = null; T.valor = trecho(t, br.index, br[0].length);
+      if (liq && liq.index > br.index) C.valorLiquido = vNum(liq[1]);
+      const qf = /total de funcionarios\s*(\d{1,3})/.exec(n), sal = um(new RegExp(`total dos salarios mais adicionais\\s*${V}`)), enc = /encargos trabalh\w*[^%]{0,40}?(\d{2,3})\s*%/.exec(n), imp = /impostos? s\w+ (?:a )?nota fiscal\s*(\d{1,2},\d{1,2})\s*%/.exec(n);
+      info("Planilha de custos", [`total mensal ${"R$ " + br[1]}${C.valorLiquido ? `, líquido após retenções R$ ${liq[1]}` : ""}`, qf ? `${qf[1]} funcionários` : "", sal ? `salários e adicionais R$ ${sal[1]}` : "", enc ? `encargos ${enc[1]}%` : "", imp ? `impostos sobre a nota ${imp[1]}%` : ""].filter(Boolean).join("; "), br.index);
+      const loc = /ta[xz]a de locacao\s*\(?\s*cortesia\s*(\d+)\s*mes/.exec(n); if (loc) info("Taxa de locação", `cortesia nos ${loc[1]} primeiros meses; depois, valor não informado na planilha`);
+      const pl = (m) => (m && numPct(m[1]) > 0 && numPct(m[1]) <= 15 ? m : null), numPct = (x) => +x.replace(",", ".");
+      const rI = pl(/retencao inss[^%]{0,40}?(\d{1,2}(?:,\d+)?)\s*%/.exec(n)), rP = pl(/retencao pis[^%]{0,40}?(\d{1,2}(?:,\d+)?)\s*%/.exec(n));
+      if (rI || rP || /retencao (?:inss|pis)/.test(n)) info("Retenções", [rI ? `INSS ${rI[1]}%` : /retencao inss/.test(n) ? "INSS" : "", rP ? `PIS/COFINS/CSLL ${rP[1]}%` : /retencao pis/.test(n) ? "PIS/COFINS/CSLL" : ""].filter(Boolean).join("; ") + " (pagas pelo condomínio à Receita Federal, descontadas da nota)");
+      if (!C.tipo || C.tipo === "Assessoria jurídica") C.tipo = "Mão de obra terceirizada";
+    } }
   if (principal) T.valor = trecho(t, principal.i, principal.len);
   if (parc && C.modalidade === "parcelado" && !C.parcelas) { const k = /(\d{1,3})\s*(?:\([^)]*\))?\s*parcelas/.exec(parc.antes); if (k) C.parcelas = +k[1]; }
   for (const x of valores) {
@@ -319,6 +344,10 @@ export function lerContrato(textoBruto, forns = []) {
     .map((x) => `${x[1].trim()} – ${x[2].trim()}`).filter((x, i, a) => a.indexOf(x) === i).slice(0, 30);
   if (!C.clausulas.length) C.clausulas = todos(/(?:^|\s)(\d{1,2})\.\s+([A-ZÀ-Ú][A-ZÀ-Ú ]{3,40}?)\s*:/g, t).map((x) => `${x[1]}. ${x[2].trim()}`).slice(0, 30);
 
+  if (C.info.some((x) => x.rot === "Planilha de custos")) {
+    const k = C.info.findIndex((x) => x.rot === "Retenções"); C.info = C.info.filter((x, i) => x.rot !== "Retenções" || i === k);
+    if (!C.tipo || /Seguro|Assessoria/.test(C.tipo)) { C.tipo = "Mão de obra terceirizada"; const qf = /total de funcionarios\s*(\d{1,3})/.exec(n); if (!C.objeto || /seguro/i.test(C.objeto)) C.objeto = `terceirização de mão de obra${qf ? ` (${qf[1]} funcionários)` : ""}`; }
+  }
   return { campos: C, trechos: T, caracteres: t.length };
 }
 

@@ -1970,12 +1970,23 @@ async function textoDoPdf(pdfjs, dados, progresso = () => {}) {
 }
 
 // ---------------------------------------------------------------- qualquer arquivo: PDF, Word (.docx), imagem ou texto
+// prints e fotos pequenas são ampliados (até ~2400 px de largura) e passados para tons de cinza: o OCR erra muito menos
+async function ampliar(fonte) {
+  if (!(fonte instanceof Blob) || typeof createImageBitmap !== "function") return fonte;
+  try {
+    const img = await createImageBitmap(fonte), k = Math.min(4, Math.max(1, 2400 / img.width));
+    if (k <= 1.05) return fonte;
+    const cv = document.createElement("canvas"); cv.width = Math.round(img.width * k); cv.height = Math.round(img.height * k);
+    const g = cv.getContext("2d"); g.imageSmoothingQuality = "high"; g.filter = "grayscale(1) contrast(1.15)"; g.drawImage(img, 0, 0, cv.width, cv.height);
+    return cv;
+  } catch { return fonte; }
+}
 async function ocrImagens(fontes, progresso) {
   progresso("Carregando o leitor de texto de imagens (pode levar um minuto)…");
   await carregarScript(TESS_URL);
   const worker = await window.Tesseract.createWorker("por", 1, { logger: (m) => { if (m.status === "recognizing text") progresso(`Reconhecendo texto: ${Math.round(m.progress * 100)}%`); } });
   let texto = "";
-  try { for (let i = 0; i < fontes.length; i++) { progresso(`Reconhecendo imagem ${i + 1} de ${fontes.length}…`); texto += (await worker.recognize(fontes[i])).data.text + "\n\n"; } }
+  try { for (let i = 0; i < fontes.length; i++) { progresso(`Reconhecendo imagem ${i + 1} de ${fontes.length}…`); texto += (await worker.recognize(await ampliar(fontes[i]))).data.text + "\n\n"; } }
   finally { await worker.terminate(); }
   return texto;
 }
@@ -2123,6 +2134,20 @@ function lerContrato(textoBruto, forns = []) {
   else if (glob) { C.modalidade = "global"; C.valorTotal = glob.v; C.valor = glob.v; principal = glob; m = /(\d{1,3})\s*(?:\([^)]*\))?\s*(?:parcelas|prestacoes)/.exec(glob.depois); if (m) { C.parcelas = +m[1]; C.modalidade = "parcelado"; C.valor = Math.round(glob.v / C.parcelas * 100) / 100; } }
   else if (anual) { C.modalidade = "anual"; C.valorTotal = anual.v; C.valor = Math.round(anual.v / 12 * 100) / 100; principal = anual; }
   else { const x = valores.find((y) => !ehLimite(y) && !ehAvulso(y) && !ehMulta(y) && /pagara|valor|honorario|preco|remunera|importancia/.test(y.antes.slice(-120))); if (x) { C.modalidade = "mensal"; C.valor = x.v; principal = x; } }
+  // planilha de custos de terceirização: total mensal da prestação (bruto) e total após as retenções (líquido)
+  { const V = "(?:r\\$\\s*)?(\\d{1,3}(?:\\.\\d{3})*,\\d{2})", vNum = (x) => +x.replace(/\./g, "").replace(",", ".");
+    const br = um(new RegExp(`total da prestacao (?:dos|de) servicos\\s*:?\\s*${V}`)), liq = um(new RegExp(`total (?:dos|de) servicos\\s*(?:liquido)?\\s*:?\\s*${V}`));
+    if (br) {
+      C.modalidade = "mensal"; C.valor = vNum(br[1]); principal = null; T.valor = trecho(t, br.index, br[0].length);
+      if (liq && liq.index > br.index) C.valorLiquido = vNum(liq[1]);
+      const qf = /total de funcionarios\s*(\d{1,3})/.exec(n), sal = um(new RegExp(`total dos salarios mais adicionais\\s*${V}`)), enc = /encargos trabalh\w*[^%]{0,40}?(\d{2,3})\s*%/.exec(n), imp = /impostos? s\w+ (?:a )?nota fiscal\s*(\d{1,2},\d{1,2})\s*%/.exec(n);
+      info("Planilha de custos", [`total mensal ${"R$ " + br[1]}${C.valorLiquido ? `, líquido após retenções R$ ${liq[1]}` : ""}`, qf ? `${qf[1]} funcionários` : "", sal ? `salários e adicionais R$ ${sal[1]}` : "", enc ? `encargos ${enc[1]}%` : "", imp ? `impostos sobre a nota ${imp[1]}%` : ""].filter(Boolean).join("; "), br.index);
+      const loc = /ta[xz]a de locacao\s*\(?\s*cortesia\s*(\d+)\s*mes/.exec(n); if (loc) info("Taxa de locação", `cortesia nos ${loc[1]} primeiros meses; depois, valor não informado na planilha`);
+      const pl = (m) => (m && numPct(m[1]) > 0 && numPct(m[1]) <= 15 ? m : null), numPct = (x) => +x.replace(",", ".");
+      const rI = pl(/retencao inss[^%]{0,40}?(\d{1,2}(?:,\d+)?)\s*%/.exec(n)), rP = pl(/retencao pis[^%]{0,40}?(\d{1,2}(?:,\d+)?)\s*%/.exec(n));
+      if (rI || rP || /retencao (?:inss|pis)/.test(n)) info("Retenções", [rI ? `INSS ${rI[1]}%` : /retencao inss/.test(n) ? "INSS" : "", rP ? `PIS/COFINS/CSLL ${rP[1]}%` : /retencao pis/.test(n) ? "PIS/COFINS/CSLL" : ""].filter(Boolean).join("; ") + " (pagas pelo condomínio à Receita Federal, descontadas da nota)");
+      if (!C.tipo || C.tipo === "Assessoria jurídica") C.tipo = "Mão de obra terceirizada";
+    } }
   if (principal) T.valor = trecho(t, principal.i, principal.len);
   if (parc && C.modalidade === "parcelado" && !C.parcelas) { const k = /(\d{1,3})\s*(?:\([^)]*\))?\s*parcelas/.exec(parc.antes); if (k) C.parcelas = +k[1]; }
   for (const x of valores) {
@@ -2238,6 +2263,10 @@ function lerContrato(textoBruto, forns = []) {
     .map((x) => `${x[1].trim()} – ${x[2].trim()}`).filter((x, i, a) => a.indexOf(x) === i).slice(0, 30);
   if (!C.clausulas.length) C.clausulas = todos(/(?:^|\s)(\d{1,2})\.\s+([A-ZÀ-Ú][A-ZÀ-Ú ]{3,40}?)\s*:/g, t).map((x) => `${x[1]}. ${x[2].trim()}`).slice(0, 30);
 
+  if (C.info.some((x) => x.rot === "Planilha de custos")) {
+    const k = C.info.findIndex((x) => x.rot === "Retenções"); C.info = C.info.filter((x, i) => x.rot !== "Retenções" || i === k);
+    if (!C.tipo || /Seguro|Assessoria/.test(C.tipo)) { C.tipo = "Mão de obra terceirizada"; const qf = /total de funcionarios\s*(\d{1,3})/.exec(n); if (!C.objeto || /seguro/i.test(C.objeto)) C.objeto = `terceirização de mão de obra${qf ? ` (${qf[1]} funcionários)` : ""}`; }
+  }
   return { campos: C, trechos: T, caracteres: t.length };
 }
 
@@ -3676,7 +3705,22 @@ function explicarContrato(c0) {
     if (atr.every(([d, m]) => Math.abs(difMeses(d.compBal, m)) <= 2) && atr.some(([d, m]) => d.compBal !== m) && problemas([...atr, ...resto]) < problemas(mens.map((d) => [d, d.compBal]))) seq = new Map(atr);
   }
   const modo = seq && S.ctModoComp !== "bal" ? "nf" : "bal";
-  const compDe = (d) => (modo === "nf" && seq.has(d) ? seq.get(d) : d.compBal);
+  const compDe = (d) => (d.alvo ? compDe(d.alvo) : modo === "nf" && seq.has(d) ? seq.get(d) : d.compBal);
+  // retenções (INSS, PIS/COFINS/CSLL) recolhidas à Receita Federal sobre as notas do fornecedor: fazem parte do valor bruto da nota
+  const nfBase = (x) => String(x || "").split("/")[0].trim(), porBase = {};
+  for (const d of L) if (/^\d{3,}$/.test(nfBase(d.nf))) (porBase[nfBase(d.nf)] ||= []).push(d);
+  const tokF = normTxt(c.forn).split(/[^a-z0-9]+/).find((w) => w.length >= 4 && !PALAVRAS_GEN.has(w)) || "";
+  const rets = [];
+  for (const b of S.todos) b.despesas.forEach((d, i) => {
+    if (doContrato(c, d.forn) || !/receita federal|darf|reten|imposto retido|inss|pis|cofins|csll|irrf/i.test(`${d.forn} ${d.desc} ${d.item}`)) return;
+    const txt = `${d.desc} ${d.det}`, cit = [...new Set([...txt.matchAll(/\bnf\s*n?[º°o.]*\s*([\d][\d/]*)/gi)].flatMap((m) => m[1].split("/")).filter((x) => /^\d{3,}$/.test(x)))];
+    const alvos = cit.filter((x) => porBase[x]); if (!alvos.length || (tokF && !normTxt(txt).includes(tokF) && alvos.length < cit.length)) return;
+    // DARF de várias notas: rateado pelo valor líquido de cada nota
+    const liq = (nf) => porBase[nf].reduce((s2, y) => s2 + y.v, 0), totL = alvos.reduce((s2, nf) => s2 + liq(nf), 0) || 1;
+    alvos.forEach((nf, k) => { const alvo = porBase[nf].find((y) => ehMensal(c, y)) || porBase[nf][0], v = alvos.length > 1 ? r2(d.v * liq(nf) / totL) : d.v;
+      rets.push({ ...d, v, vTotal: d.v, id: `${b.mes}#${i}`, mesBal: b.mes, compBal: alvo.compBal, alvo, nfAlvo: nf, ret: true, cit: alvos }); });
+  });
+  for (const r of rets) (ehMensal(c, r.alvo) ? mens : avs).push(r);
   const multaP = /(\d+(?:[.,]\d+)?)\s*%/.exec(c.multa || ""), jurosP = /juros de (\d+(?:[.,]\d+)?)\s*%/.exec(c.multa || "");
   const aniv = ini ? mesMais(ini, 12) : "", porSM = /sal[aá]rio/i.test(c.reajuste || "");
   const fatorSM = (mes) => { const k = Math.floor(difMeses(ini, mes) / 12); return k >= 1 ? salMin(+mesMais(ini, 12 * k).slice(0, 4)) / salMin(+ini.slice(0, 4)) : 1; };
@@ -3702,6 +3746,12 @@ function explicarContrato(c0) {
       if (porSM) { const f = fatorSM(m.mes), esp = r2(m.dev * f); if (Math.abs(pc - esp) <= Math.max(1, esp * 0.01)) add("ok", `Reajuste no aniversário do contrato pelo salário mínimo (${brl(salMin(+ini.slice(0, 4)))} → ${brl(salMin(+mesMais(ini, 12).slice(0, 4)))}): ${brl(esp)}.`, r2(esp - m.dev)); else add("info", `Com o reajuste previsto (${c.reajuste}), a mensalidade seria cerca de ${brl(esp)}.`); }
       else if (dif > 0 && dif / m.dev <= 0.12) add("prov", `Compatível com um reajuste anual de ${pct(dif / m.dev)}${c.reajuste ? ` (${c.reajuste})` : ""}; confirme o índice aplicado.`, dif);
     }
+    for (const alvo of new Set([...P, ...A].filter((d) => d.ret).map((d) => d.alvo))) {
+      const rs = [...P, ...A].filter((d) => d.ret && d.alvo === alvo), sr = r2(rs.reduce((s2, d) => s2 + d.v, 0)), liqNF = r2((porBase[nfBase(alvo.nf)] || [alvo]).reduce((s2, y) => s2 + y.v, 0)), bruto = r2(liqNF + sr);
+      const pis = rs.find((d) => /pis|cofins|csll/i.test(`${d.item} ${d.desc}`) && d.cit.length === 1), confere = pis && Math.abs(pis.v / 0.0465 - bruto) <= 2;
+      add(confere ? "ok" : "info", `Nota ${nfBase(alvo.nf)}: líquido pago ao fornecedor ${brl(liqNF)} + retenções recolhidas à Receita ${brl(sr)} (${rs.map((d) => `${(d.item || "").toLowerCase()} ${brl(d.v)}`).join("; ")}) = valor bruto ${brl(bruto)}.${confere ? " As retenções conferem com a nota (PIS/COFINS/CSLL = 4,65% do bruto)." : ""}${rs.some((d) => d.cit.length > 1) ? ` O DARF de ${brl(rs.find((d) => d.cit.length > 1).vTotal)} recolhe as notas ${rs.find((d) => d.cit.length > 1).cit.join(", ")} juntas; a parte desta nota foi rateada pelo valor líquido de cada uma.` : ""}`);
+    }
+    if (c.valorLiquido && P.length) { const liq = r2(P.filter((d) => !d.ret).reduce((s2, d) => s2 + d.v, 0)); if (Math.abs(liq - c.valorLiquido) > c.valorLiquido * tolP) add("info", `Líquido pago ${brl(liq)} contra ${brl(c.valorLiquido)} líquidos da planilha de custos (${liq > c.valorLiquido ? "+" : ""}${brl(liq - c.valorLiquido)}).`); }
     // competência informada no balancete diferente da ordem das notas
     for (const d of P) if (modo === "nf" && seq.has(d) && seq.get(d) !== d.compBal) add("info", `O balancete informa a NF ${d.nf} como competência ${rotCurto(d.compBal)}; pela ordem de emissão das notas, ela é a mensalidade de ${rotCurto(seq.get(d))}.`);
     // pagamento após o vencimento
@@ -3729,7 +3779,8 @@ function explicarContrato(c0) {
       const pv = previsaoAvulso(c, d), nome = `${(d.item || "pagamento").toLowerCase()}${d.det ? ` (${d.det.replace(/\.$/, "")})` : ""}`;
       if (pv && pv.prev) { const okv = Math.abs(d.v - pv.prev) <= 1; aPrev = r2(aPrev + d.v); add(okv ? "ok" : "info", `Avulso de ${brl(d.v)}: ${nome}. Contrato: ${pv.txt}${okv ? "" : `; pago ${d.v > pv.prev ? "a mais" : "a menos"} ${brl(Math.abs(d.v - pv.prev))}`}.${pv.excecao ? ` O contrato prevê ${pv.excecao}: confira se esta cobrança está entre elas.` : ""}`); }
       else if (pv && pv.txt) { aPrev = r2(aPrev + d.v); add("info", `Avulso de ${brl(d.v)}: ${nome}. ${pv.txt}`); }
-      else { aSem = r2(aSem + d.v); add("alerta", `Avulso de ${brl(d.v)}: ${nome}. Sem previsão nos dados do contrato cadastrado.`); }
+      else if (d.ret) { aPrev = r2(aPrev + d.v); }
+      else { aSem = r2(aSem + d.v); const pl = (c.info || []).find((x) => x.rot === "Planilha de custos"), loc = (c.info || []).find((x) => x.rot === "Taxa de locação"); add("alerta", `Avulso de ${brl(d.v)}: ${nome}. ${pl ? `Não consta na planilha de custos do contrato${/administra/i.test(d.item || "") ? ", que não tem taxa de administração" : ""}${loc && /administra|loca/i.test(d.item || "") ? ` (só taxa de locação: ${loc.txt})` : ""}.` : "Sem previsão nos dados do contrato cadastrado."}`); }
     }
     const resto = r2(dif - expl);
     if (P.length && resto > tolV) add("alerta", `${brl(resto)} acima da mensalidade sem justificativa nas notas, alertas ou respostas registradas.`);
@@ -3838,8 +3889,9 @@ function fichaContrato(c0) {
   // barra de composição do que foi pago
   const partes = [["Mensalidade dentro do contrato", cp.base, "#2a9d8f"], ["Acima, explicado", cp.acimaExpl, "#5b9bd5"], ["Acima, sem explicação", cp.semExpl, "#d9663a"], ["Avulsos previstos", cp.aPrev, "#8e7cc3"], ["Compras parceladas", cp.aParc, "#7aa6c2"], ["Avulsos sem previsão", cp.aSem, "#c2185b"]].filter((p) => p[1] > 0.009);
   const totComp = partes.reduce((s2, p) => s2 + p[1], 0) || 1;
-  const tags = (l) => [...l.P.map((d) => `<span class="nf-tag" title="${esc(d.desc)}">${/^\d/.test(d.nf || "") ? "NF " + esc(d.nf) : esc(d.nf || "s/n")} · ${brl(d.v)} · baixa ${esc(String(d.baixa).slice(0, 5))}${E.modo === "nf" && E.seq?.get(d) && E.seq.get(d) !== d.compBal ? ` <i>informada ${rotCurto(d.compBal)}</i>` : ""}</span>`),
-    ...l.A.map((d) => `<span class="nf-tag av" title="${esc(d.desc)}">${esc((d.item || "Avulso").toLowerCase())} · ${brl(d.v)} · ${esc(d.nf || "s/n")}</span>`)].join("");
+  const tagRet = (d) => `<span class="nf-tag ret" title="${esc(d.desc)}">retenção ${esc((d.item || "").toLowerCase())} · ${brl(d.v)}${d.cit.length > 1 ? " (rateio)" : ""} · NF ${esc(d.nfAlvo)}</span>`;
+  const tags = (l) => [...l.P.filter((d) => d.ret).map(tagRet), ...l.A.filter((d) => d.ret).map(tagRet), ...l.P.filter((d) => !d.ret).map((d) => `<span class="nf-tag" title="${esc(d.desc)}">${/^\d/.test(d.nf || "") ? "NF " + esc(d.nf) : esc(d.nf || "s/n")} · ${brl(d.v)} · baixa ${esc(String(d.baixa).slice(0, 5))}${E.modo === "nf" && E.seq?.get(d) && E.seq.get(d) !== d.compBal ? ` <i>informada ${rotCurto(d.compBal)}</i>` : ""}</span>`),
+    ...l.A.filter((d) => !d.ret).map((d) => `<span class="nf-tag av" title="${esc(d.desc)}">${esc((d.item || "Avulso").toLowerCase())} · ${brl(d.v)} · ${esc(d.nf || "s/n")}</span>`)].join("");
   const mostrar = linhas.filter((l) => !S.ctSoDif || l.st !== "ok" || l.A.length);
   const nAten = linhas.filter((l) => !["ok", "explicado", "aguarda", "nada"].includes(l.st)).length;
   return `<div class="card ficha-ct">
