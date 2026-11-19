@@ -36,7 +36,7 @@ export function nomeCategoria(h) {
 }
 
 // Fornecedores normalizados (o texto do balancete varia de mês a mês)
-const ALIASES = [
+const ALIASES_V1 = [
   [/SECRETARIA DA RECEITA|RECEITA FEDERAL/i, "Receita Federal (tributos)"],
   [/LOGOSERV|LOGO GERENCIA/i, "Logoserv / Logo (RH terceirizado)"],
   [/QUALYSERVICE/i, "Qualyservice Gestão e Serviços"],
@@ -78,6 +78,91 @@ const ALIASES = [
   [/ALLIANZ/i, "Allianz Seguros"],
   [/MATEUS SANTIAGO/i, "Mateus Santiago Oliveira (extintores)"],
 ];
+// nome padronizado: razão social por extenso, sem LTDA/ME/S.A., com acentos e sem apelidos entre parênteses
+const ALIASES = [
+  [/SECRETARIA DA RECEITA|RECEITA FEDERAL/i, "Receita Federal"],
+  [/LOGOSERV/i, "Logoserv Recursos Humanos"],
+  [/LOGO GER[EÊ]NCIA/i, "Logo Gerência de Cobranças"],
+  [/QUALYSERVICE/i, "Qualyservice Gestão e Serviços"],
+  [/AMPER/i, "Amper Tecnologia e Segurança Eletrônica"],
+  [/PINHEIRO BRITO/i, "Pinheiro Brito Sociedade Individual de Advocacia"],
+  [/HEBERT GOMES/i, "Hebert Gomes Dias"],
+  [/\bDR3\b/i, "DR3 Manutenção e Serviços"],
+  [/COELBA/i, "Coelba"],
+  [/EMBASA/i, "Embasa"],
+  [/SICOOB/i, "Sicoob"],
+  [/BRADESCO/i, "Bradesco"],
+  [/DUOS? S[IÍ]NDICOS?/i, "Duos Síndicos 360"],
+  [/DIEGO CONCEI/i, "Diego Conceição Pereira"],
+  [/ANDRADE E MUNIZ/i, "Andrade e Muniz Comércio e Serviços"],
+  [/NIL MATERIAIS/i, "Nil Materiais de Construção"],
+  [/C[EÉ]LIA XISTO/i, "Célia Xisto Lima Publicidade"],
+  [/PAULO S[EÉ]RGIO/i, "Paulo Sérgio dos Santos Maurício"],
+  [/TRACCK/i, "Tracck Tecnologia"],
+  [/HORTO R\.?F/i, "Horto R.F Tudo para Jardins"],
+  [/LOMES/i, "Lomes Multi Distribuidora"],
+  [/LEROY/i, "Leroy Merlin"],
+  [/JCM NITER[OÓ]I/i, "JCM Niterói Refrigeração"],
+  [/FRIGELAR/i, "Frigelar Comércio e Indústria"],
+  [/\bTIM S\.?A\b|^TIM\b/i, "TIM"],
+  [/MATHEUS DA SILVA/i, "Matheus da Silva Dias dos Santos"],
+  [/NEIDE LIMA/i, "Neide Lima Pereira Alves de Oliveira"],
+  [/CAIO OLIVEIRA/i, "Caio Oliveira Santa Ana"],
+  [/FERREIRA COSTA/i, "Ferreira Costa e Cia"],
+  [/SAPUCA[UÚ]NA/i, "Sapucaúna Locação de Equipamentos"],
+  [/ENTERPRISE/i, "Enterprise Smart Connect"],
+  [/MAGAZINE LUIZA|MAGALU/i, "Magazine Luiza"],
+  [/EBAZAR/i, "Ebazar.com.br"],
+  [/LIMEIRA/i, "André Nascimento Limeira"],
+  [/PASSARINHO/i, "M.F. Passarinho Artigos Eletrônicos"],
+  [/RBMX/i, "RBMX Imunização e Manutenção"],
+  [/INGRID PIMENTEL/i, "Ingrid Pimentel Silva Gabriel"],
+  [/\bNILDO\b/i, "José Nildo Ferreira dos Santos"],
+  [/MERCADO\s?PAGO/i, "Mercado Pago"],
+  [/ALLIANZ/i, "Allianz Seguros"],
+  [/MATEUS SANTIAGO/i, "Mateus Santiago Oliveira"],
+  [/OP[CÇ][AÃ]O\s?ARTEFATOS/i, "Opção Artefatos"],
+  [/PODER JUDICI[AÁ]RIO/i, "Poder Judiciário do Estado da Bahia"],
+  [/ANDERSON FIGUEIREDO/i, "Anderson Figueiredo do Nascimento"],
+  [/\bAF INSTALA/i, "AF Instalação, Manutenção e Construção"],
+  [/FERIMPORT/i, "Ferimport Comércio, Representação e Importação"],
+  [/VIP CASA DECOR/i, "VIP Casa Decor Comércio"],
+];
+// acentos e palavras cortadas no PDF
+const ACENTOS = Object.fromEntries(("instalacao:instalação manutencao:manutenção construcao:construção construcoes:construções comercio:comércio servicos:serviços servico:serviço " +
+  "solucao:solução solucoes:soluções irrigacao:irrigação refrigeracao:refrigeração importacao:importação comunicacao:comunicação locacao:locação seguranca:segurança " +
+  "eletronica:eletrônica eletronico:eletrônico eletronicos:eletrônicos eletrico:elétrico eletricos:elétricos eletrica:elétrica eletricas:elétricas distribuicao:distribuição " +
+  "imunizacao:imunização sonorizacao:sonorização acrilicos:acrílicos metalurgica:metalúrgica petroleo:petróleo industria:indústria moveis:móveis escritorio:escritório " +
+  "vestuario:vestuário vestuari:vestuário decoracao:decoração decora:decoração palacio:palácio irmaos:irmãos opcao:opção judiciario:judiciário atlantida:atlântida " +
+  "representacoes:representações representacao:representação repr:representação sao:são joao:joão jose:josé andre:andré sergio:sérgio mauricio:maurício celia:célia " +
+  "niteroi:niterói gerencia:gerência cobrancas:cobranças sindicos:síndicos conceicao:conceição lucia:lúcia brandao:brandão gestao:gestão impor:importação nascim:nascimento " +
+  "tecnicos:técnicos tecnica:técnica hidraulica:hidráulica hidraulicos:hidráulicos ferragens:ferragens papelaria:papelaria grafica:gráfica optica:óptica farmacia:farmácia " +
+  "agua:água energia:energia veiculos:veículos acessorios:acessórios informatica:informática musica:música musicais:musicais otica:ótica").split(" ").map((x) => x.split(":")));
+const ABREV = [[/\bSoc\.?\s+Ind\.?\s+de\b/gi, "Sociedade Individual de"], [/\bCom\.\s/gi, "Comércio "], [/\bArt\.\s/gi, "Artigos "], [/\bSeg\.\s/gi, "Segurança "]];
+const SIGLA = /^(?:[A-Z]\.){1,3}[A-Z]?\.?$|^[B-DF-HJ-NP-TV-Z0-9]{2,4}$|^[A-Z]\d|^\d[A-Z]/;
+export function padronizarNome(t) {
+  let s = String(t || "").replace(/\s+\d{6,}\.?$/, "").replace(/\s*\([^)]*\)\s*/g, " ").replace(/[,\s]+(LTDA|ME|EPP|EIRELI|S\/A|S\.A\.?|SA)\.?(?=\s|$)/gi, " ").replace(/\s+/g, " ").trim();
+  for (const [re, v] of ABREV) s = s.replace(re, v);
+  return s.split(" ").map((w, i) => {
+    const up = w.toUpperCase();
+    if (SIGLA.test(up) && w === up) return up;
+    let lw = w.toLowerCase();
+    const base = lw.normalize("NFD").replace(/[\u0300-\u036f]/g, ""), m = /^([a-z]+)([^a-z]*)$/.exec(base);
+    if (m && ACENTOS[m[1]] && lw.normalize("NFD").replace(/[\u0300-\u036f]/g, "") === lw) lw = ACENTOS[m[1]] + m[2];
+    if (i && MINUSC.has(lw)) return lw;
+    return lw.charAt(0).toUpperCase() + lw.slice(1);
+  }).join(" ");
+}
+// nome canônico de um fornecedor a partir do texto do balancete ou de um nome já exibido antes
+export function nomeFornecedor(bruto, desc = "") {
+  const a = ALIASES.find(([re]) => re.test(bruto)) || (desc ? ALIASES.find(([re]) => re.test(desc)) : null);
+  return a ? a[1] : padronizarNome(bruto);
+}
+// nome usado pelas versões anteriores (para reencontrar anotações gravadas com ele)
+export function nomeAntigo(bruto, desc = "") {
+  const a = ALIASES_V1.find(([re]) => re.test(bruto)) || (desc ? ALIASES_V1.find(([re]) => re.test(desc)) : null);
+  return a ? a[1] : titulo(bruto.replace(/\s+\d{6,}\.?$/, "").replace(/\s+(LTDA|ME|EIRELI|S\/A|SA)\.?$/i, "").trim());
+}
 
 // remove CPF/RG/CNPJ de pessoa física e telefones do texto público
 export function mascarar(s) {
@@ -104,10 +189,9 @@ export function separarFornecedor(desc, categoria) {
   let forn = partes.length > 1 ? partes[1] : partes[0];
   let det = partes.length > 2 ? partes.slice(2).join(" - ") : "";
   const item = partes.length > 1 ? partes[0] : "";
-  let achou = ALIASES.find(([re]) => re.test(forn)) || ALIASES.find(([re]) => re.test(desc));
-  if (achou) forn = achou[1];
-  else forn = titulo(forn.replace(/\s+\d{6,}\.?$/, "").replace(/\s+(LTDA|ME|EIRELI|S\/A|SA)\.?$/i, "").trim());
-  return { forn, item: item.trim(), det: det.trim() };
+  const bruto = forn;
+  forn = nomeFornecedor(bruto, desc);
+  return { forn, fornV1: nomeAntigo(bruto, desc), item: item.trim(), det: det.trim() };
 }
 
 async function linhasDoPdf(pdfjsLib, data) {

@@ -40,7 +40,7 @@ function nomeCategoria(h) {
 }
 
 // Fornecedores normalizados (o texto do balancete varia de mês a mês)
-const ALIASES = [
+const ALIASES_V1 = [
   [/SECRETARIA DA RECEITA|RECEITA FEDERAL/i, "Receita Federal (tributos)"],
   [/LOGOSERV|LOGO GERENCIA/i, "Logoserv / Logo (RH terceirizado)"],
   [/QUALYSERVICE/i, "Qualyservice Gestão e Serviços"],
@@ -82,6 +82,91 @@ const ALIASES = [
   [/ALLIANZ/i, "Allianz Seguros"],
   [/MATEUS SANTIAGO/i, "Mateus Santiago Oliveira (extintores)"],
 ];
+// nome padronizado: razão social por extenso, sem LTDA/ME/S.A., com acentos e sem apelidos entre parênteses
+const ALIASES = [
+  [/SECRETARIA DA RECEITA|RECEITA FEDERAL/i, "Receita Federal"],
+  [/LOGOSERV/i, "Logoserv Recursos Humanos"],
+  [/LOGO GER[EÊ]NCIA/i, "Logo Gerência de Cobranças"],
+  [/QUALYSERVICE/i, "Qualyservice Gestão e Serviços"],
+  [/AMPER/i, "Amper Tecnologia e Segurança Eletrônica"],
+  [/PINHEIRO BRITO/i, "Pinheiro Brito Sociedade Individual de Advocacia"],
+  [/HEBERT GOMES/i, "Hebert Gomes Dias"],
+  [/\bDR3\b/i, "DR3 Manutenção e Serviços"],
+  [/COELBA/i, "Coelba"],
+  [/EMBASA/i, "Embasa"],
+  [/SICOOB/i, "Sicoob"],
+  [/BRADESCO/i, "Bradesco"],
+  [/DUOS? S[IÍ]NDICOS?/i, "Duos Síndicos 360"],
+  [/DIEGO CONCEI/i, "Diego Conceição Pereira"],
+  [/ANDRADE E MUNIZ/i, "Andrade e Muniz Comércio e Serviços"],
+  [/NIL MATERIAIS/i, "Nil Materiais de Construção"],
+  [/C[EÉ]LIA XISTO/i, "Célia Xisto Lima Publicidade"],
+  [/PAULO S[EÉ]RGIO/i, "Paulo Sérgio dos Santos Maurício"],
+  [/TRACCK/i, "Tracck Tecnologia"],
+  [/HORTO R\.?F/i, "Horto R.F Tudo para Jardins"],
+  [/LOMES/i, "Lomes Multi Distribuidora"],
+  [/LEROY/i, "Leroy Merlin"],
+  [/JCM NITER[OÓ]I/i, "JCM Niterói Refrigeração"],
+  [/FRIGELAR/i, "Frigelar Comércio e Indústria"],
+  [/\bTIM S\.?A\b|^TIM\b/i, "TIM"],
+  [/MATHEUS DA SILVA/i, "Matheus da Silva Dias dos Santos"],
+  [/NEIDE LIMA/i, "Neide Lima Pereira Alves de Oliveira"],
+  [/CAIO OLIVEIRA/i, "Caio Oliveira Santa Ana"],
+  [/FERREIRA COSTA/i, "Ferreira Costa e Cia"],
+  [/SAPUCA[UÚ]NA/i, "Sapucaúna Locação de Equipamentos"],
+  [/ENTERPRISE/i, "Enterprise Smart Connect"],
+  [/MAGAZINE LUIZA|MAGALU/i, "Magazine Luiza"],
+  [/EBAZAR/i, "Ebazar.com.br"],
+  [/LIMEIRA/i, "André Nascimento Limeira"],
+  [/PASSARINHO/i, "M.F. Passarinho Artigos Eletrônicos"],
+  [/RBMX/i, "RBMX Imunização e Manutenção"],
+  [/INGRID PIMENTEL/i, "Ingrid Pimentel Silva Gabriel"],
+  [/\bNILDO\b/i, "José Nildo Ferreira dos Santos"],
+  [/MERCADO\s?PAGO/i, "Mercado Pago"],
+  [/ALLIANZ/i, "Allianz Seguros"],
+  [/MATEUS SANTIAGO/i, "Mateus Santiago Oliveira"],
+  [/OP[CÇ][AÃ]O\s?ARTEFATOS/i, "Opção Artefatos"],
+  [/PODER JUDICI[AÁ]RIO/i, "Poder Judiciário do Estado da Bahia"],
+  [/ANDERSON FIGUEIREDO/i, "Anderson Figueiredo do Nascimento"],
+  [/\bAF INSTALA/i, "AF Instalação, Manutenção e Construção"],
+  [/FERIMPORT/i, "Ferimport Comércio, Representação e Importação"],
+  [/VIP CASA DECOR/i, "VIP Casa Decor Comércio"],
+];
+// acentos e palavras cortadas no PDF
+const ACENTOS = Object.fromEntries(("instalacao:instalação manutencao:manutenção construcao:construção construcoes:construções comercio:comércio servicos:serviços servico:serviço " +
+  "solucao:solução solucoes:soluções irrigacao:irrigação refrigeracao:refrigeração importacao:importação comunicacao:comunicação locacao:locação seguranca:segurança " +
+  "eletronica:eletrônica eletronico:eletrônico eletronicos:eletrônicos eletrico:elétrico eletricos:elétricos eletrica:elétrica eletricas:elétricas distribuicao:distribuição " +
+  "imunizacao:imunização sonorizacao:sonorização acrilicos:acrílicos metalurgica:metalúrgica petroleo:petróleo industria:indústria moveis:móveis escritorio:escritório " +
+  "vestuario:vestuário vestuari:vestuário decoracao:decoração decora:decoração palacio:palácio irmaos:irmãos opcao:opção judiciario:judiciário atlantida:atlântida " +
+  "representacoes:representações representacao:representação repr:representação sao:são joao:joão jose:josé andre:andré sergio:sérgio mauricio:maurício celia:célia " +
+  "niteroi:niterói gerencia:gerência cobrancas:cobranças sindicos:síndicos conceicao:conceição lucia:lúcia brandao:brandão gestao:gestão impor:importação nascim:nascimento " +
+  "tecnicos:técnicos tecnica:técnica hidraulica:hidráulica hidraulicos:hidráulicos ferragens:ferragens papelaria:papelaria grafica:gráfica optica:óptica farmacia:farmácia " +
+  "agua:água energia:energia veiculos:veículos acessorios:acessórios informatica:informática musica:música musicais:musicais otica:ótica").split(" ").map((x) => x.split(":")));
+const ABREV = [[/\bSoc\.?\s+Ind\.?\s+de\b/gi, "Sociedade Individual de"], [/\bCom\.\s/gi, "Comércio "], [/\bArt\.\s/gi, "Artigos "], [/\bSeg\.\s/gi, "Segurança "]];
+const SIGLA = /^(?:[A-Z]\.){1,3}[A-Z]?\.?$|^[B-DF-HJ-NP-TV-Z0-9]{2,4}$|^[A-Z]\d|^\d[A-Z]/;
+function padronizarNome(t) {
+  let s = String(t || "").replace(/\s+\d{6,}\.?$/, "").replace(/\s*\([^)]*\)\s*/g, " ").replace(/[,\s]+(LTDA|ME|EPP|EIRELI|S\/A|S\.A\.?|SA)\.?(?=\s|$)/gi, " ").replace(/\s+/g, " ").trim();
+  for (const [re, v] of ABREV) s = s.replace(re, v);
+  return s.split(" ").map((w, i) => {
+    const up = w.toUpperCase();
+    if (SIGLA.test(up) && w === up) return up;
+    let lw = w.toLowerCase();
+    const base = lw.normalize("NFD").replace(/[\u0300-\u036f]/g, ""), m = /^([a-z]+)([^a-z]*)$/.exec(base);
+    if (m && ACENTOS[m[1]] && lw.normalize("NFD").replace(/[\u0300-\u036f]/g, "") === lw) lw = ACENTOS[m[1]] + m[2];
+    if (i && MINUSC.has(lw)) return lw;
+    return lw.charAt(0).toUpperCase() + lw.slice(1);
+  }).join(" ");
+}
+// nome canônico de um fornecedor a partir do texto do balancete ou de um nome já exibido antes
+function nomeFornecedor(bruto, desc = "") {
+  const a = ALIASES.find(([re]) => re.test(bruto)) || (desc ? ALIASES.find(([re]) => re.test(desc)) : null);
+  return a ? a[1] : padronizarNome(bruto);
+}
+// nome usado pelas versões anteriores (para reencontrar anotações gravadas com ele)
+function nomeAntigo(bruto, desc = "") {
+  const a = ALIASES_V1.find(([re]) => re.test(bruto)) || (desc ? ALIASES_V1.find(([re]) => re.test(desc)) : null);
+  return a ? a[1] : titulo(bruto.replace(/\s+\d{6,}\.?$/, "").replace(/\s+(LTDA|ME|EIRELI|S\/A|SA)\.?$/i, "").trim());
+}
 
 // remove CPF/RG/CNPJ de pessoa física e telefones do texto público
 function mascarar(s) {
@@ -108,10 +193,9 @@ function separarFornecedor(desc, categoria) {
   let forn = partes.length > 1 ? partes[1] : partes[0];
   let det = partes.length > 2 ? partes.slice(2).join(" - ") : "";
   const item = partes.length > 1 ? partes[0] : "";
-  let achou = ALIASES.find(([re]) => re.test(forn)) || ALIASES.find(([re]) => re.test(desc));
-  if (achou) forn = achou[1];
-  else forn = titulo(forn.replace(/\s+\d{6,}\.?$/, "").replace(/\s+(LTDA|ME|EIRELI|S\/A|SA)\.?$/i, "").trim());
-  return { forn, item: item.trim(), det: det.trim() };
+  const bruto = forn;
+  forn = nomeFornecedor(bruto, desc);
+  return { forn, fornV1: nomeAntigo(bruto, desc), item: item.trim(), det: det.trim() };
 }
 
 async function linhasDoPdf(pdfjsLib, data) {
@@ -536,7 +620,7 @@ function alertas(meses) {
     const igual = new Set(g.map((d) => d.v)).size === 1;
     add(igual ? "media" : "baixa", "Pagamento em duplicidade", `Energia: UC ${u}, referência ${ref}, ${kw} kWh, paga ${g.length} vezes`,
       g.map((d) => `${rotuloMes(d.mes)} – baixa ${d.baixa} – NF ${d.nf} – ${fmt(d.v)}`).join("\n") + "\nMesma unidade, mesmo mês e mesmo consumo, com notas fiscais diferentes.",
-      `As faturas ${g.map((d) => d.nf).join(" e ")} da UC ${u} são a mesma conta paga duas vezes? Se sim, a Coelba creditou a diferença?`, g.map((d) => d.id), g.at(-1).mes, "Coelba (energia)");
+      `As faturas ${g.map((d) => d.nf).join(" e ")} da UC ${u} são a mesma conta paga duas vezes? Se sim, a Coelba creditou a diferença?`, g.map((d) => d.id), g.at(-1).mes, "Coelba");
   }
   if (refErradas.length) add("baixa", "Qualidade do balancete", `${refErradas.length} lançamento(s) com mês de referência posterior ao pagamento`,
     refErradas.map((d) => `${rotuloMes(d.mes)} – ${d.forn} – ref. ${d.ref}, pago em ${d.baixa} – ${fmt(d.v)}`).join("\n") + "\nProvável erro de digitação da administradora; dificulta conferir o que já foi pago.",
@@ -630,7 +714,7 @@ function alertas(meses) {
   if (ordem.length >= 4) {
     const ultimos2 = new Set(ordem.slice(-2)), janela = new Set(ordem.slice(-8, -2));
     for (const f of porFornecedor(meses)) {
-      if (/banco|receita federal/i.test(f.forn)) continue;
+      if (/sicoob|bradesco|banco|receita federal/i.test(f.forn)) continue;
       const naJanela = [...f.meses].filter((m) => janela.has(m)).length;
       if (L.filter((d) => d.forn === f.forn && janela.has(d.mes)).every((d) => PARC.test(d.desc))) continue;
       const recente = [...f.meses].some((m) => ultimos2.has(m));
@@ -2012,7 +2096,16 @@ function lerContrato(textoBruto, forns = []) {
     if (x === principal || x === glob || x === parc) continue;
     if (ehAvulso(x)) { const p = /(?:por|cada)\s+([a-z0-9 ]{3,30}?)(?=[,.;]|\s+e\s|\s+mais|$)/.exec(x.depois) || /(hora tecnica|preposto|taxa de [a-z]+)/.exec(x.antes.slice(-50)); C.adicionais.push({ valor: x.v, desc: /preposto/.test(x.depois.slice(0, 80) + x.antes.slice(-50)) ? "preposto por audiência" : p ? (x.depois.match(/^\s*(?:\([^)]*\)\s*)?(por|cada)/) ? "por " : "") + p[1].trim() : "valor avulso" }); }
   }
-  C.adicionais = C.adicionais.filter((x, i, a) => a.findIndex((y) => y.valor === x.valor && y.desc === x.desc) === i);
+  // valores avulsos fixados em percentual do salário mínimo (ex.: assembleias, atas)
+  for (const x of todos(/(?:custo|valor|importancia|honorarios?)\s+(?:de\s+)?(\d{1,3})\s*%\s*(?:\([^)]*\)\s*)?d[oe]\s+salario[- ]minimo/g)) {
+    const i0 = Math.max(0, x.index - 260); let ctx = n.slice(i0, x.index + 220);
+    const al = [...ctx.slice(0, x.index - i0).matchAll(/(?:^|[\s;:])[a-z]\)\s/g)].at(-1), base = i0 + (al ? al.index : 0); if (al) ctx = ctx.slice(al.index);
+    const fim = ctx.search(/;\s*[a-z]\)\s|:\s*[a-z]\)\s/); if (fim > 0) ctx = ctx.slice(0, fim);
+    const desc = /assembl/.test(ctx) && /acompanha|presenc|particip/.test(ctx) ? "acompanhamento em assembleia" : /\bata/.test(ctx) ? "elaboração de ata" : /audienc/.test(ctx) ? "audiência" : /notifica/.test(ctx) ? "notificação" : "serviço avulso";
+    const salvo = /(?:salvo|exceto|ressalvad[oa]s?)\s+([^:;]{4,120}?)(?=,?\s*face|[:;]|$)/.exec(ctx);
+    C.adicionais.push({ valor: 0, pctSM: +x[1], desc: desc + (salvo ? `, exceto ${(n.length === t.length ? t.substr(base + salvo.index + salvo[0].indexOf(salvo[1]), salvo[1].length) : salvo[1]).trim()}` : "") });
+  }
+  C.adicionais = C.adicionais.filter((x, i, a) => a.findIndex((y) => y.valor === x.valor && y.desc === x.desc && y.pctSM === x.pctSM) === i);
   // seguro: coberturas e franquias
   const cobs = todos(/([a-zà-ú ,/]{4,60}?)\s*[-–:]\s*(?:lmi|limite maximo de indenizacao|importancia segurada)\s*:?\s*r\$\s?([\d.,]+)/g).map((x) => `${t.substr(x.index, x[1].length).trim()}: R$ ${t.substr(x.index + x[0].length - x[2].length, x[2].length)}`);
   if (cobs.length) info("Coberturas", cobs.join("; "));
@@ -2058,6 +2151,17 @@ function lerContrato(textoBruto, forns = []) {
   for (const x of todos(/multa/g)) { const f2 = frase(x.index), fn = ctNorm(f2); if (/rescis|rescind|cancelament|rompiment|resili|infrac|infrator|descumpr|fidelidade/.test(fn) && !/atraso no (pagamento|recebimento)|juros/.test(fn) && f2.length < 470) { C.multaRescisoria = f2.replace(/^[a-z]\)\s*/i, ""); break; } }
   m = um(/atraso no (?:pagamento|recebimento)[^.]{0,160}?multa\s+(?:moratoria\s+)?(?:de\s+)?(\d{1,2}(?:,\d+)?)\s*%/) || todos(/multa\s+(?:moratoria\s+)?(?:de\s+)?(\d{1,2}(?:,\d+)?)\s*%[^.]{0,80}?(?:atraso|inadimpl|vencimento)/g).find((x) => !/por dia de atraso|entrega|execucao|conclusao/.test(x[0])) || um(/(?:nao cumprimento|inadimplemento)[^.]{0,120}?multa\s+de\s+(\d{1,2}(?:,\d+)?)\s*%/);
   if (m) { const j = /juros\s+(?:de\s+)?(\d{1,2}(?:,\d+)?)\s*%/.exec(n.slice(m.index, m.index + 220)); C.multa = `${m[1]}%${j ? ` + juros de ${j[1]}% ao mês` : ""}`; }
+  if (!C.multa) { m = um(/vencimentos?\.?\s+importara\s+em\s+multa\s+(?:de\s+)?(\d{1,2}(?:,\d+)?)\s*%/); if (m) { const j = /juros\s+(?:de\s+)?(\d{1,2}(?:,\d+)?)\s*%/.exec(n.slice(m.index, m.index + 220)); C.multa = `${m[1]}%${j ? ` + juros de ${j[1]}% ao mês` : ""}`; } }
+  // honorários de êxito e quem paga
+  { const ocs = todos(/ad exitum|a titulos? (?:de )?exito|exito nas (?:demandas|recuperac)|honorarios[^.]{0,40}exito/g);
+    const qt = (y) => (n.slice(Math.max(0, y.index - 350), y.index + 150).match(/\d{1,2}\s*%/g) || []).length;
+    const x = [...ocs].sort((a, b) => qt(b) - qt(a))[0];
+    if (x) { const win = n.slice(Math.max(0, x.index - 350), x.index + 150); const pcts = [...win.matchAll(/(\d{1,2})\s*%\s*(?:\([^)]*\))?,?\s*(?:este |esta )?(na via administrativa|independente de intervencao judicial|judicia\w*)?/g)].map((y) => `${y[1]}%${y[2] ? (/administrativa/.test(y[2]) ? " na via administrativa" : " na via judicial") : ""}`);
+      info("Honorários de êxito", pcts.length ? `${[...new Set(pcts)].join("; ")}, sobre o valor que o condomínio efetivamente receber` : frase(x.index), x.index); } }
+  m = um(/repasses?\s+e\s+nao\s+despesas?\s+d[oa]\s+contratante|pagos?\s+pelos?\s+inadimplentes|(?:custas|honorarios)[^.]{0,80}(?:repassad|revertid|revestid)[oa]s?\s+a[oa]?s?\s+(?:proprio\s+)?(?:condomino\s+)?inadimplente/);
+  if (m) info("Quem paga o êxito", "O contrato diz que os honorários de êxito são pagos pelos inadimplentes (repasse), não são despesa do condomínio.", m.index);
+  m = um(/(?:custas|emolumentos|despesas)[^.]{0,200}?(?:deverao ser restituid|serao reembolsad|devem ser reembolsad|deverao ser reembolsad|restituidos pel)/);
+  if (m) info("Reembolso de despesas", "Custas, emolumentos e taxas pagos pelo contratado são reembolsados pelo condomínio, mediante comprovação.", m.index);
   m = um(/multa\s+de\s+(\d{1,2}(?:,\d+)?)\s*%[^.]{0,40}?por dia de atraso[^.]*/); if (m) info("Multa por atraso na execução", t.substr(m.index, m[0].length).trim(), m.index);
 
   // ---- reajuste
@@ -2165,12 +2269,38 @@ function juntar() {
   const m = { ...S.base };
   for (const [k, b] of Object.entries(S.locais)) m[k] = { ...b, origem: "local" };
   S.todos = Object.values(m).sort((a, b) => a.mes.localeCompare(b.mes));
+  padronizarFornecedores();
   const nb = Object.keys(S.base).length, nl = Object.keys(S.locais).length;
   $("#statusBase").textContent = S.todos.length
     ? `${S.todos.length} meses (${rotuloMes(S.todos[0].mes)} a ${rotuloMes(S.todos.at(-1).mes)})${nl ? ` · ${nl} não publicado${nl > 1 ? "s" : ""}` : ""}`
     : "nenhum balancete";
   if (S.todos[0]?.condominio) $("#nomeCond").textContent = S.todos.at(-1).condominio;
   montarPeriodo();
+}
+// nomes de fornecedores padronizados em todos os balancetes, inclusive os gravados antes da padronização,
+// guardando o nome antigo para reencontrar anotações e contratos cadastrados com ele
+function padronizarFornecedores() {
+  S.nomeV1 = {};
+  for (const b of S.todos) for (const d of b.despesas || []) {
+    const r = separarFornecedor(d.desc || "", d.cat);
+    d.forn = r.forn; S.nomeV1[r.forn] = r.fornV1;
+  }
+  const lista = S.contratos || []; let mudou = false;
+  for (const c of lista) {
+    if (!c.forn || S.nomeV1[c.forn]) continue;
+    const cands = Object.keys(S.nomeV1).filter((k) => S.nomeV1[k] === c.forn);
+    const ref = `${c.contratado || ""} ${c.objeto || ""}`;
+    const novo = cands.length === 1 ? cands[0] : cands.find((k) => nomeFornecedor(ref) === k) || cands[0] || nomeFornecedor(c.forn);
+    if (novo && novo !== c.forn) { c.fornAntes = c.forn; c.forn = novo; mudou = true; }
+  }
+  if (mudou) { S.contratos = [...lista].sort((a, b) => a.forn.localeCompare(b.forn, "pt-BR")); S.ctRenomear = true; }
+}
+// versão do alerta com os nomes de fornecedores usados antes da padronização
+function comNomesAntigos(a) {
+  const mp = S.nomeV1 || {}; let titulo = a.titulo || "", forn = a.forn;
+  for (const [n, v] of Object.entries(mp)) if (n !== v && titulo.includes(n)) titulo = titulo.split(n).join(v);
+  if (forn && mp[forn]) forn = mp[forn];
+  return titulo === a.titulo && forn === a.forn ? null : { ...a, titulo, forn };
 }
 function montarPeriodo() {
   const ops = S.todos.map((b) => `<option value="${b.mes}">${rotuloMes(b.mes)}</option>`).join("");
@@ -2203,6 +2333,7 @@ function render() {
     $("#cntAlertas").textContent = n || ""; $("#cntAlertas").hidden = !n;
     S.alertasTodos = alertas(S.todos); prepararAlertas(S.alertasTodos);
     S.novidades = novidades();
+    if (S.ctRenomear && (!AC.ligado || ehAdmin())) { S.ctRenomear = false; salvarConteudo("contratos").then(() => registrar("Padronizou nomes", "Fornecedores dos contratos")).catch(() => { S.ctRenomear = true; }); }
     painel(); acompanhamento(); renderExecutivo(S.meses, $("#secAnalises")); categorias(); fornecedores(); listaAlertas(); tabParcelas(); notas(); conselho();
     renderMes(S.todos, S.mesSel || S.meses.at(-1).mes, alertas(S.todos), $("#secMes"));
     renderProjecao(S.todos, $("#secProjecao"));
@@ -2309,7 +2440,8 @@ const ativo = (a) => a.sit === "pendente" || a.sit === "questionado";
 function registroDe(a) {
   // procura a anotação pela chave atual; se não achar, pela chave antiga ou pelos pontos que foram agrupados neste alerta
   if (S.acomp[a.chave]) return S.acomp[a.chave];
-  const cands = [chaveAntiga(a), ...(a.partes || []).flatMap((p) => [chaveAlerta(p), chaveAntiga(p)])];
+  const v1 = comNomesAntigos(a), pv1 = (a.partes || []).map(comNomesAntigos).filter(Boolean);
+  const cands = [...(v1 ? [chaveAlerta(v1), chaveAntiga(v1)] : []), chaveAntiga(a), ...(a.partes || []).flatMap((p) => [chaveAlerta(p), chaveAntiga(p)]), ...pv1.flatMap((p) => [chaveAlerta(p), chaveAntiga(p)])];
   const achados = cands.map((c) => [c, S.acomp[c]]).filter(([, e]) => e && !e.migradoPara).sort((x, y) => tsDe(y[1]).localeCompare(tsDe(x[1])));
   if (!achados.length) return null;
   const [velha, e] = achados[0];
@@ -3306,7 +3438,18 @@ function prepararAta() {
 // ---------------------------------------------------------------- contratos
 // filtro opcional: só os lançamentos cujo histórico contém o texto (ex.: "ASSESSORIA"), para não misturar reembolsos
 const normTxt = (t) => String(t || "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
-const lancDoContrato = (c, b, dentro = true) => b.despesas.filter((d) => d.forn === c.forn && (!c.filtro || normTxt(d.desc).includes(normTxt(c.filtro).trim())) === dentro);
+// lançamentos da mensalidade: pelo filtro de texto informado ou, sem filtro, pelo histórico que se repete com o valor do contrato
+const ehMensal = (c, d) => c.filtro ? normTxt(d.desc).includes(normTxt(c.filtro).trim()) : c.itemAuto ? d.item === c.itemAuto : true;
+const lancDoContrato = (c, b, dentro = true) => b.despesas.filter((d) => d.forn === c.forn && ehMensal(c, d) === dentro);
+function itemMensal(c) {
+  if (c.filtro || !c.valor || c.modalidade === "global" || c.modalidade === "anual") return "";
+  const tot = {}, perto = {};
+  for (const b of S.todos) for (const d of b.despesas) if (d.forn === c.forn) { tot[d.item] = (tot[d.item] || 0) + 1; if (Math.abs(d.v - c.valor) <= c.valor * 0.15) perto[d.item] = (perto[d.item] || 0) + 1; }
+  if (Object.keys(tot).length < 2) return "";
+  const best = Object.entries(perto).sort((a, b) => b[1] - a[1])[0];
+  return best && best[1] >= 2 ? best[0] : "";
+}
+const ctEf = (c) => { if (c.itemAuto !== undefined) return c; const it = itemMensal(c); return { ...c, itemAuto: it }; };
 function pagoNoMes(forn, mes, filtro) { const b = S.todos.find((x) => x.mes === mes); return b ? lancDoContrato({ forn, filtro }, b).reduce((s2, d) => s2 + d.v, 0) : 0; }
 const ctIniMes = (c) => (c.inicio || "").slice(0, 7);
 const diasMes = (mes) => new Date(+mes.slice(0, 4), +mes.slice(5, 7), 0).getDate();
@@ -3324,9 +3467,10 @@ function devidoNoMes(c, mes) {
 function fimContrato(c) { if (c.indeterminado) return ""; if (c.prazoMeses && c.inicio && c.inicio.length === 10) { const v = fimVigente(c.inicio, c.prazoMeses, c.renovacaoAuto, hojeISO()); if (v) return v.fim; } return c.fim || ""; }
 const refIso = (ref) => { const m = /^(\d{2})\/(\d{4})$/.exec(String(ref || "").trim()); return m ? `${m[2]}-${m[1]}` : ""; };
 function analisarContrato(c) {
+  c = ctEf(c);
   const hoje = hojeISO(), tol = (c.tol ?? 2) / 100, fim = fimContrato(c);
   const ms = S.todos.filter((b) => (!c.inicio || b.mes >= ctIniMes(c)) && (!fim || b.mes <= fim.slice(0, 7)));
-  const meses = ms.map((b) => { const dev = devidoNoMes(c, b.mes), p = r2(pagoNoMes(c.forn, b.mes, c.filtro)); const st = ehCumulativo(c) || (!dev && !p) ? (p ? "pago" : "nada") : !p ? "ausente" : Math.abs(p - dev) <= dev * tol ? "ok" : "dif"; return { mes: b.mes, p, dev, st }; });
+  const meses = ms.map((b) => { const dev = devidoNoMes(c, b.mes), p = r2(lancDoContrato(c, b).reduce((s2, d) => s2 + d.v, 0)); const st = ehCumulativo(c) || (!dev && !p) ? (p ? "pago" : "nada") : !p ? "ausente" : Math.abs(p - dev) <= dev * tol ? "ok" : "dif"; return { mes: b.mes, p, dev, st }; });
   const ult = meses.at(-1), venceEm = fim ? diasEntre(hoje, fim) : null;
   const totPago = meses.reduce((s2, m) => s2 + m.p, 0);
   const totDev = ehCumulativo(c) ? (c.valorTotal || c.valor || 0) * (c.modalidade === "anual" ? Math.max(1, Math.ceil(meses.length / 12)) : 1) : meses.reduce((s2, m) => s2 + m.dev, 0);
@@ -3427,42 +3571,197 @@ function linhaDoTempo(an) {
     <div class="legenda" style="margin:8px 0 4px"><span><i style="background:#0b5a8c"></i>Vigente</span><span><i style="background:#d9663a"></i>Vence em até 60 dias</span><span><i style="background:#fbb812"></i>Prazo para avisar a não renovação</span><span><i class="linha" style="background:#eb1a30"></i>Hoje</span></div>
     <div class="grafico-largo"><svg class="g" viewBox="0 0 ${W} ${H}" role="img" aria-label="Vigência de cada contrato">${g}</svg></div></div>`;
 }
-function fichaContrato(c) {
-  const an = analisarContrato(c), fim = an.fim;
-  const todosL = S.todos.flatMap((b) => lancDoContrato(c, b).map((d) => ({ ...d, mesBal: b.mes })));
-  const foraL = S.todos.flatMap((b) => lancDoContrato(c, b, false).map((d) => ({ ...d, mesBal: b.mes })));
-  const porComp = {}; for (const d of todosL) { const k = refIso(d.ref) || d.mesBal; (porComp[k] ||= []).push(d); }
+// ---- explicação das diferenças: cruza contrato, balancetes, notas da administradora, alertas e respostas registradas
+const mesMais = (mes, k) => { const d = new Date(+mes.slice(0, 4), +mes.slice(5, 7) - 1 + k, 1); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`; };
+const difMeses = (a, b) => (+b.slice(0, 4) - +a.slice(0, 4)) * 12 + (+b.slice(5, 7) - +a.slice(5, 7));
+const isoBR = (s) => { const m = /(\d{2})\/(\d{2})\/(\d{4})/.exec(s || ""); return m ? `${m[3]}-${m[2]}-${m[1]}` : ""; };
+const rotCurto = (mes) => rotuloMes(mes).replace("/20", "/");
+const numBR = (x) => parseFloat(String(x).replace(",", "."));
+const GRUPOS_AV = [
+  ["cartório e custas", /cartor|registro|emolument|custas|\bdaj\b/, /cartor|registro|emolument|custas|reembols|restitu/],
+  ["assembleia", /assembl/, /assembl/],
+  ["ata", /\bata\b|\batas\b/, /\bata\b|\batas\b/],
+  ["certidão", /certid/, /certid/],
+  ["audiência", /audienc|preposto/, /audienc|preposto/],
+  ["consulta", /serasa|consulta/, /serasa|consulta/],
+  ["peças e materiais", /\bpeca|materia/, /\bpeca|materia|nao inclu|por conta/],
+];
+function previsaoAvulso(c, d) {
+  const txt = normTxt(`${d.item} ${d.desc}`), g = GRUPOS_AV.filter(([, re]) => re.test(txt));
+  if (!g.length) return null;
+  const di = isoBR(d.det), ano = +(di ? di.slice(0, 4) : d.mesBal.slice(0, 4));
+  for (const [nome, , reC] of g) {
+    for (const a of c.adicionais || []) if (reC.test(normTxt(a.desc))) {
+      const prev = a.pctSM ? r2(salMin(ano) * a.pctSM / 100) : a.valor, k = a.desc.search(/exceto|salvo/);
+      return { nome, prev, txt: a.pctSM ? `${a.pctSM}% do salário mínimo de ${ano} (${brl(salMin(ano))}) = ${brl(prev)}` : `${brl(a.valor)} ${a.desc}`, excecao: k >= 0 ? a.desc.slice(k) : "" };
+    }
+    for (const i of c.info || []) if (reC.test(normTxt(i.rot + " " + i.txt))) return { nome, prev: null, txt: `Previsto no contrato (${i.rot.toLowerCase()}): ${i.txt}` };
+  }
+  return { nome: g[0][0], prev: null, txt: "" };
+}
+const PALAVRAS_GEN = new Set(["comercio", "servicos", "sociedade", "individual", "advocacia", "tecnologia", "seguranca", "eletronica", "gestao", "manutencao", "distribuidora", "materiais", "construcao"]);
+function citaFornecedor(texto, c, ds) {
+  const t = normTxt(texto), tok = normTxt(c.forn).split(/[^a-z0-9]+/).find((w) => w.length >= 4 && !PALAVRAS_GEN.has(w));
+  if (tok && new RegExp(`\\b${tok}\\b`).test(t)) return true;
+  return ds.some((d) => /^\d{3,}$/.test(String(d.nf || "")) && new RegExp(`\\b(?:nf|nota fiscal|nota)\\s*(?:n\\s*[°ºo.]*\\s*)?${d.nf}\\b`).test(t));
+}
+function explicarContrato(c0) {
+  const c = ctEf(c0), an = analisarContrato(c0), tolP = (c.tol ?? 2) / 100, ini = ctIniMes(c), ultBal = S.todos.at(-1)?.mes;
+  const meses = an.meses.map((m) => m.mes), setM = new Set(meses);
+  const L = S.todos.flatMap((b) => b.despesas.map((d, i) => ({ ...d, id: `${b.mes}#${i}`, mesBal: b.mes, compBal: refIso(d.ref) || b.mes })).filter((d) => d.forn === c.forn))
+    .filter((d) => !ini || d.mesBal >= ini || d.compBal >= ini);
+  const mens = L.filter((d) => ehMensal(c, d)), avs = L.filter((d) => !ehMensal(c, d));
+  const porNF = {}; for (const d of L) if (/^\d{3,}$/.test(String(d.nf || "").trim())) (porNF[+d.nf] ||= []).push(d);
+  // a mesma NF em parcelas diferentes (Parcela 01/05, 02/05…) não é duplicidade
+  const parc = (d) => (/parcela\s*(\d+)\s*\/\s*\d+/i.exec(`${d.det} ${d.desc}`) || [])[1];
+  for (const k of Object.keys(porNF)) { const g = porNF[k], ps = g.map(parc); if (ps.every(Boolean) && new Set(ps).size === g.length) delete porNF[k]; }
+  const nfRep = Object.values(porNF).filter((v) => v.length > 1);
+  // hipótese: a competência certa é a ordem de emissão das notas (uma nota por mês)
+  const comDev = an.meses.filter((m) => m.dev > 0).map((m) => m.mes);
+  const problemas = (atr) => { const k = {}; for (const [, m] of atr) k[m] = (k[m] || 0) + 1; return comDev.filter((m) => m !== ultBal && !k[m]).length + Object.values(k).reduce((s2, n) => s2 + Math.max(0, n - 1), 0); };
+  const unicas = mens.filter((d) => /^\d+$/.test(String(d.nf || "").trim()) && porNF[+d.nf]?.[0] === d).sort((a, b) => +a.nf - +b.nf);
+  let seq = null;
+  if (!ehCumulativo(c) && unicas.length >= 3 && comDev.length && unicas.length <= comDev.length + 1) {
+    const atr = unicas.map((d, i) => [d, mesMais(comDev[0], i)]), resto = mens.filter((d) => !unicas.includes(d)).map((d) => [d, d.compBal]);
+    if (atr.every(([d, m]) => Math.abs(difMeses(d.compBal, m)) <= 2) && atr.some(([d, m]) => d.compBal !== m) && problemas([...atr, ...resto]) < problemas(mens.map((d) => [d, d.compBal]))) seq = new Map(atr);
+  }
+  const modo = seq && S.ctModoComp !== "bal" ? "nf" : "bal";
+  const compDe = (d) => (modo === "nf" && seq.has(d) ? seq.get(d) : d.compBal);
+  const multaP = /(\d+(?:[.,]\d+)?)\s*%/.exec(c.multa || ""), jurosP = /juros de (\d+(?:[.,]\d+)?)\s*%/.exec(c.multa || "");
+  const aniv = ini ? mesMais(ini, 12) : "", porSM = /sal[aá]rio/i.test(c.reajuste || "");
+  const fatorSM = (mes) => { const k = Math.floor(difMeses(ini, mes) / 12); return k >= 1 ? salMin(+mesMais(ini, 12 * k).slice(0, 4)) / salMin(+ini.slice(0, 4)) : 1; };
+  const atrasos = [];
   const linhas = an.meses.map((m) => {
-    const pagos = todosL.filter((d) => d.mesBal === m.mes), comp = porComp[m.mes] || [], pc = r2(comp.reduce((s2, d) => s2 + d.v, 0));
-    return { ...m, pagos, comp, pc, difC: r2(pc - m.dev) };
+    const P = mens.filter((d) => compDe(d) === m.mes), A = avs.filter((d) => (setM.has(d.compBal) ? d.compBal : d.mesBal) === m.mes);
+    const pc = r2(P.reduce((s2, d) => s2 + d.v, 0)), pa = r2(A.reduce((s2, d) => s2 + d.v, 0)), dif = r2(pc - m.dev), tolV = Math.max(1, m.dev * tolP);
+    const ex = []; let expl = 0, aPrev = 0, aSem = 0;
+    const add = (tipo, txt, v = 0) => { if (!ex.some((x) => x.txt === txt)) ex.push({ tipo, txt }); expl = r2(expl + v); };
+    // valor proporcional pelo período da nota
+    for (const d of P) {
+      const per = /per[ií]odo de (\d{2}\/\d{2}\/\d{4}) a (\d{2}\/\d{2}\/\d{4})/i.exec(`${d.det} ${d.desc}`); if (!per || !c.valor) continue;
+      const a = isoBR(per[1]), b = isoBR(per[2]), nd = diasEntre(a, b) + 1, v30 = r2(c.valor * Math.min(30, nd) / 30), vc = r2(c.valor * nd / diasMes(m.mes));
+      const em30 = Math.abs(d.v - v30) <= 1;
+      if (em30 || Math.abs(d.v - vc) <= 1) {
+        add("ok", `Mês proporcional: ${nd} dias de serviço (${dataBR(a)} a ${dataBR(b)}), ${brl(c.valor)} × ${nd}/${em30 ? 30 : diasMes(m.mes)} = ${brl(d.v)}${em30 && Math.abs(d.v - vc) > 1 ? " (mês comercial de 30 dias)" : ""}.`, P.length === 1 ? dif : 0);
+        const iniC = c.inicio ? (c.inicio.length === 10 ? c.inicio : c.inicio + "-01") : "";
+        if (iniC !== a) add("info", `O período da nota começa em ${dataBR(a)}; o início cadastrado é ${iniC ? dataBR(iniC) : "não informado"}. Ajuste o início do contrato para o devido ficar exato.`);
+      }
+    }
+    // reajuste
+    if (aniv && m.mes >= aniv && pc && Math.abs(dif - expl) > tolV) {
+      if (porSM) { const f = fatorSM(m.mes), esp = r2(m.dev * f); if (Math.abs(pc - esp) <= Math.max(1, esp * 0.01)) add("ok", `Reajuste no aniversário do contrato pelo salário mínimo (${brl(salMin(+ini.slice(0, 4)))} → ${brl(salMin(+mesMais(ini, 12).slice(0, 4)))}): ${brl(esp)}.`, r2(esp - m.dev)); else add("info", `Com o reajuste previsto (${c.reajuste}), a mensalidade seria cerca de ${brl(esp)}.`); }
+      else if (dif > 0 && dif / m.dev <= 0.12) add("prov", `Compatível com um reajuste anual de ${pct(dif / m.dev)}${c.reajuste ? ` (${c.reajuste})` : ""}; confirme o índice aplicado.`, dif);
+    }
+    // competência informada no balancete diferente da ordem das notas
+    for (const d of P) if (modo === "nf" && seq.has(d) && seq.get(d) !== d.compBal) add("info", `O balancete informa a NF ${d.nf} como competência ${rotCurto(d.compBal)}; pela ordem de emissão das notas, ela é a mensalidade de ${rotCurto(seq.get(d))}.`);
+    // pagamento após o vencimento
+    for (const d of P) {
+      const pg = isoBR(d.baixa); if (!c.diaVenc || !pg) continue;
+      const venc = `${mesMais(compDe(d), 1)}-${String(Math.min(c.diaVenc, 28)).padStart(2, "0")}`, at = diasEntre(venc, pg);
+      if (at <= 5) continue;
+      atrasos.push({ d, at, mesBal: d.mesBal });
+      const lim = multaP ? m.dev * (numBR(multaP[1]) + (jurosP ? numBR(jurosP[1]) * Math.ceil(at / 30) : 0)) / 100 : 0, sobra = r2(dif - expl);
+      if (sobra > 0.01 && sobra <= lim + 0.5) add("ok", `Pago ${at} dias após o vencimento (${dataBR(venc)}): a diferença cabe na multa e nos juros do contrato (${c.multa}).`, sobra);
+      else add("info", `Paga em ${d.baixa.slice(0, 5)}, ${at} dias após o vencimento (${dataBR(venc).slice(0, 5)}).`);
+    }
+    // mesma nota paga mais de uma vez
+    for (const d of [...P, ...A]) { const g = porNF[+d.nf]; if (g && g.length > 1) add("alerta", `A NF ${d.nf} também foi paga em ${g.filter((y) => y !== d).map((y) => `${y.baixa} (${brl(y.v)}, balancete ${rotCurto(y.mesBal)})`).join(", ")}: possível pagamento em duplicidade.`); }
+    if (!P.length && m.dev > 0) add(m.mes === ultBal ? "info" : "alerta", m.mes === ultBal ? "Competência do último balancete: costuma ser paga no balancete seguinte." : "Nenhum pagamento da mensalidade identificado para esta competência.");
+    // pagamentos fora da mensalidade
+    for (const d of A) {
+      const pv = previsaoAvulso(c, d), nome = `${(d.item || "pagamento").toLowerCase()}${d.det ? ` (${d.det.replace(/\.$/, "")})` : ""}`;
+      if (pv && pv.prev) { const okv = Math.abs(d.v - pv.prev) <= 1; aPrev = r2(aPrev + d.v); add(okv ? "ok" : "info", `Avulso de ${brl(d.v)}: ${nome}. Contrato: ${pv.txt}${okv ? "" : `; pago ${d.v > pv.prev ? "a mais" : "a menos"} ${brl(Math.abs(d.v - pv.prev))}`}.${pv.excecao ? ` O contrato prevê ${pv.excecao}: confira se esta cobrança está entre elas.` : ""}`); }
+      else if (pv && pv.txt) { aPrev = r2(aPrev + d.v); add("info", `Avulso de ${brl(d.v)}: ${nome}. ${pv.txt}`); }
+      else { aSem = r2(aSem + d.v); add("alerta", `Avulso de ${brl(d.v)}: ${nome}. Sem previsão nos dados do contrato cadastrado.`); }
+    }
+    const resto = r2(dif - expl);
+    if (P.length && resto > tolV) add("alerta", `${brl(resto)} acima da mensalidade sem justificativa nas notas, alertas ou respostas registradas.`);
+    else if (P.length && resto < -tolV) add("alerta", `${brl(-resto)} abaixo da mensalidade.`);
+    // o que os balancetes dizem: notas da administradora, alertas e respostas
+    const ds = [...P, ...A], ids = new Set(ds.map((d) => d.id));
+    for (const mb of new Set(ds.map((d) => d.mesBal))) for (const n of S.todos.find((x) => x.mes === mb)?.notas || []) if (citaFornecedor(n.texto, c, ds.filter((d) => d.mesBal === mb))) add("fonte", `Nota da administradora no balancete de ${rotCurto(mb)}: ${n.texto.replace(/^\d+\)\s*/, "")}`);
+    for (const a of S.alertasTodos || []) if ((a.ids || []).some((i) => ids.has(i))) { const r = S.acomp[a.chave] || {}; add("fonte", `Alerta: ${a.titulo}${r.resposta ? ` — resposta registrada${r.respondidoEm ? ` em ${dataBR(r.respondidoEm)}` : ""}: “${r.resposta.trim()}”` : ` — ${SITUACOES[a.sit] || "Pendente"}, sem resposta registrada`}`); }
+    const st = !P.length && m.dev > 0 ? (m.mes === ultBal ? "aguarda" : "ausente") : Math.abs(dif) <= tolV ? "ok" : Math.abs(resto) <= tolV ? "explicado" : expl ? "parcial" : "sem";
+    return { ...m, P, A, pc, pa, dif, expl, resto: Math.abs(resto) <= tolV ? 0 : resto, ex, st, aPrev, aSem };
   });
-  let acum = 0;
-  const repetidas = Object.entries(porComp).filter(([, v]) => v.length > 1);
-  // a competência do último balancete costuma ser paga no mês seguinte: não conta como falta
-  const ultBal = S.todos.at(-1)?.mes;
-  const cum = ehCumulativo(c);
-  const semComp = cum ? [] : linhas.filter((l) => !l.comp.length && l.dev > 0 && l.mes !== ultBal).map((l) => l.mes);
-  const acima = cum ? [] : linhas.filter((l) => l.pc > l.dev * (1 + (c.tol ?? 2) / 100));
+  // ---- conclusões do período
+  const ach = [], soma = (k, f = () => true) => r2(linhas.filter(f).reduce((s2, l) => s2 + l[k], 0));
+  const totP = soma("pc"), totA = soma("pa"), semExpl = r2(linhas.reduce((s2, l) => s2 + Math.max(0, l.resto), 0));
+  const acimaExpl = r2(linhas.reduce((s2, l) => s2 + (l.dif > 0 ? Math.max(0, Math.min(l.dif, l.expl)) : 0), 0));
+  const base = r2(totP - linhas.reduce((s2, l) => s2 + Math.max(0, l.dif), 0)), aPrev = soma("aPrev"), aSem = soma("aSem");
+  const prop = linhas.flatMap((l) => l.ex).find((x) => x.tipo === "ok" && x.txt.startsWith("Mês proporcional"));
+  if (prop) ach.push(["confirmado", "Primeiro mês proporcional", prop.txt]);
+  if (seq) {
+    const erradas = [...seq].filter(([d, m]) => d.compBal !== m);
+    ach.push([modo === "nf" ? "confirmado" : "provavel", "Competências informadas fora de ordem", `As ${unicas.length} notas da mensalidade, em ordem de emissão (NF ${unicas[0].nf} a ${unicas.at(-1).nf}), cobrem uma competência por mês, de ${rotCurto(comDev[0])} a ${rotCurto(mesMais(comDev[0], unicas.length - 1))}, sem falta nem duplicidade. Os meses “sem pagamento” e “pagos duas vezes” vêm de ${erradas.length} nota(s) com a competência informada errada no balancete: ${erradas.map(([d, m]) => `NF ${d.nf} (informada ${rotCurto(d.compBal)}, é ${rotCurto(m)})`).join("; ")}.`]);
+  }
+  const acima = linhas.filter((l) => l.resto > 0);
+  if (acima.length) {
+    const i0 = linhas.indexOf(acima[0]), depois = linhas.slice(i0).filter((l) => l.P.length), med = r2(acima.reduce((s2, l) => s2 + l.pc, 0) / acima.length);
+    const cents = acima.filter((l) => Math.round(l.pc * 100) % 100 !== 0);
+    const exito = (c.info || []).find((x) => x.rot === "Honorários de êxito"), quem = (c.info || []).find((x) => x.rot === "Quem paga o êxito");
+    const temFonte = acima.some((l) => l.ex.some((x) => x.tipo === "fonte"));
+    let txt = acima.length >= 3 && acima.length / depois.length >= 0.6
+      ? `Desde ${rotCurto(acima[0].mes)}, a mensalidade paga ficou acima do contrato em ${acima.length} de ${depois.length} meses: em média ${brl(med)} contra ${brl(c.valor)} previstos (+${pct(med / c.valor - 1)}). No total, ${brl(semExpl)} sem justificativa.`
+      : `${brl(semExpl)} pagos acima da mensalidade em ${acima.map((l) => rotCurto(l.mes)).join(", ")}, sem justificativa.`;
+    if (aniv && acima[0].mes < aniv) txt += ` O reajuste anual só vale a partir de ${rotCurto(aniv)}${porSM ? ` e, pelo salário mínimo, levaria a mensalidade a cerca de ${brl(r2(c.valor * fatorSM(aniv)))}` : ""}: não explica esses valores.`;
+    txt += temFonte ? " Veja nas linhas da tabela as notas e alertas ligados a esses pagamentos." : " Nenhuma nota da administradora, alerta respondido ou cláusula cadastrada explica a diferença.";
+    if (cents.length >= 2) txt += ` Os valores variam e têm centavos (${cents.slice(0, 3).map((l) => brl(l.pc)).join(", ")}…), sinal de que cada nota soma itens diferentes: peça a composição de cada nota.`;
+    if (exito) txt += ` O contrato prevê honorários de êxito (${exito.txt})${quem ? ", mas diz que eles são pagos pelos inadimplentes (repasse) e não são despesa do condomínio. Se o excedente for êxito, ele não deveria sair do caixa do condomínio" : ""}.`;
+    else if (!(c.info || []).length && !(c.adicionais || []).length && c.origem === "") txt += " Importe o PDF do contrato para cruzar com as cláusulas.";
+    ach.push(["sem", "Valor acima do contrato", txt]);
+  }
+  const aus = linhas.filter((l) => l.st === "ausente");
+  if (aus.length) ach.push(["sem", "Competências sem pagamento", `Nenhuma mensalidade identificada para ${aus.map((l) => rotCurto(l.mes)).join(", ")}${seq && modo === "bal" ? ". Pela ordem das notas, não há falta (escolha “Pela ordem das notas” acima da tabela)" : ""}.`]);
+  if (nfRep.length) ach.push(["sem", "Mesma nota paga mais de uma vez", nfRep.map((g) => `NF ${g[0].nf}: ${g.map((d) => `${d.baixa} (${brl(d.v)})`).join(" e ")}`).join("; ") + ". Peça a nota fiscal de cada pagamento ou o comprovante de devolução."]);
+  if (avs.length) {
+    const grupos = {}; for (const d of avs) { const pv = previsaoAvulso(c, d), k = pv ? pv.nome : (d.item || "outros").toLowerCase(); (grupos[k] ||= []).push(d); }
+    const exc = avs.map((d) => previsaoAvulso(c, d)).find((p) => p && p.excecao);
+    ach.push([aSem > 0 ? "sem" : "provavel", "Pagamentos fora da mensalidade", `${brl(totA)} em ${avs.length} pagamento(s): ${Object.entries(grupos).map(([k, v]) => `${k} ${brl(v.reduce((s2, d) => s2 + d.v, 0))} (${v.length})`).join("; ")}. ${aPrev ? `${brl(aPrev)} têm previsão no contrato` : ""}${aPrev && aSem ? "; " : ""}${aSem ? `${brl(aSem)} sem previsão nos dados cadastrados` : ""}.${exc ? ` O contrato prevê ${exc.excecao}: confira se as cobranças estão entre elas.` : ""}`]);
+  }
+  if (atrasos.length) {
+    const fs = new Set(atrasos.map((x) => x.mesBal)), saldo = [...fs].some((mb) => (S.todos.find((b) => b.mes === mb)?.notas || []).some((n) => /falta de saldo/i.test(n.texto)));
+    ach.push(["info", "Pagamentos após o vencimento", `${atrasos.length} pagamento(s) mais de 5 dias depois do dia ${c.diaVenc} (maior atraso: ${Math.max(...atrasos.map((x) => x.at))} dias)${c.multa ? `; o contrato prevê ${c.multa} por atraso` : ""}.${saldo ? " Nos mesmos balancetes, a administradora informa pagamentos atrasados por falta de saldo do condomínio." : ""}`]);
+  }
+  return { c, an, linhas, ach, seq, modo, comp: { base, acimaExpl, semExpl, aPrev, aSem, totP, totA }, mens, avs };
+}
+const ST_CT = { ok: ["Conforme", "ok"], explicado: ["Explicado", "expl"], parcial: ["Explicado em parte", "parc"], sem: ["Sem explicação", "sem"], ausente: ["Sem pagamento", "aus"], aguarda: ["Aguardando", "agu"], nada: ["—", "agu"], pago: ["Pago", "ok"], dif: ["Diferença", "sem"] };
+const NIVEL = { confirmado: ["Confirmado pelos dados", "ok"], provavel: ["Provável", "expl"], sem: ["Sem explicação", "sem"], info: ["Para saber", "agu"] };
+function fichaContrato(c0) {
+  const E = explicarContrato(c0), c = E.c, an = E.an, fim = an.fim, linhas = E.linhas, cp = E.comp;
   const avisoData = fim && c.avisoDias ? somaDias(fim, -c.avisoDias) : "";
+  // perguntas a partir do que ficou sem explicação
   const perguntas = [];
-  if (cum && an.totDev && an.totPago > an.totDev * 1.02) perguntas.push(`Já foram pagos ${brl(an.totPago)}, acima do valor ${c.modalidade === "anual" ? "anual" : "global"} de ${brl(an.totDev)} previsto no contrato${c.numero ? ` nº ${c.numero}` : ""}. Pedimos o detalhamento e os aditivos que justificam a diferença.`);
-  if (acima.length) perguntas.push(`Nas competências ${acima.map((l) => rotuloMes(l.mes)).join(", ")} foram pagos valores acima dos ${brl(c.valor)} mensais previstos no contrato${c.numero ? ` nº ${c.numero}` : ""} (${brl(acima.reduce((s2, l) => s2 + l.difC, 0))} acima nesses meses; no período todo, ${brl(an.totPago)} pagos contra ${brl(an.totDev)} devidos). Pedimos as notas fiscais com a composição de cada valor e o fundamento contratual.`);
-  if (repetidas.length) perguntas.push(`As competências ${repetidas.map(([k]) => rotuloMes(k)).join(", ")} aparecem em mais de um pagamento (${repetidas.map(([k, v]) => `${rotuloMes(k)}: NF ${v.map((d) => d.nf).join(" e ")}`).join("; ")}). Pedimos esclarecer se houve pagamento em duplicidade ou competência informada errada.`);
-  if (semComp.length) perguntas.push(`Não há pagamento identificado para as competências ${semComp.map(rotuloMes).join(", ")}. Pedimos confirmar se estão quitadas e em qual nota.`);
-  if (foraL.length) perguntas.push(`Além da mensalidade, foram pagos ${brl(foraL.reduce((s2, d) => s2 + d.v, 0))} ao fornecedor em outros lançamentos (${[...new Set(foraL.map((d) => d.item || d.desc.split(" - ")[0]))].slice(0, 4).join(", ")}). Pedimos os comprovantes que justificam cada reembolso.`);
+  const ref = c.numero ? ` nº ${c.numero}` : "";
+  for (const [nv, tit, txt] of E.ach) {
+    if (nv !== "sem" && !(nv === "provavel" && /fora da mensalidade/.test(tit))) continue;
+    if (tit === "Valor acima do contrato") perguntas.push(`Pelo contrato${ref}, a mensalidade é de ${brl(c.valor)}, mas foram pagos ${brl(cp.semExpl)} acima disso em ${linhas.filter((l) => l.resto > 0).map((l) => rotCurto(l.mes)).join(", ")}. Pedimos a composição de cada nota fiscal e o documento (aditivo, aprovação em assembleia ou cláusula) que autoriza cada valor a mais.${(c.info || []).some((x) => x.rot === "Quem paga o êxito") ? " Se forem honorários de êxito, pedimos esclarecer por que foram pagos pelo condomínio, já que o contrato diz que são pagos pelos inadimplentes." : ""}`);
+    else if (tit === "Competências sem pagamento") perguntas.push(`Não identificamos pagamento das competências ${linhas.filter((l) => l.st === "ausente").map((l) => rotCurto(l.mes)).join(", ")}. Pedimos confirmar se estão quitadas e em qual nota.`);
+    else if (tit === "Mesma nota paga mais de uma vez") perguntas.push(`${txt.replace(/\. Peça.*$/, "")}. Pedimos a nota fiscal de cada pagamento ou o comprovante de devolução do valor pago em duplicidade.`);
+    else if (tit === "Pagamentos fora da mensalidade") perguntas.push(`Além da mensalidade, foram pagos ${brl(cp.totA)} ao fornecedor (${E.avs.slice(0, 5).map((d) => `${(d.item || "").toLowerCase()} ${brl(d.v)}`).join("; ")}${E.avs.length > 5 ? "…" : ""}). Pedimos os comprovantes de cada despesa e a autorização dos valores sem previsão no contrato.${/exceto|salvo/.test(txt) ? " Pedimos também confirmar se as assembleias cobradas não estão entre as isentas pelo contrato." : ""}`);
+  }
+  if (E.seq && E.modo === "nf") perguntas.push(`Pedimos à administradora corrigir a competência informada das notas ${[...E.seq].filter(([d, m]) => d.compBal !== m).map(([d]) => d.nf).join(", ")}, que estão fora da ordem de emissão.`);
   S.ctPerguntas = perguntas;
-  // gráfico: pago por competência x devido
-  const W = 1040, H = 260, ml = 92, mr = 16, mt = 18, mb = 32, mx = Math.max(...linhas.map((l) => Math.max(l.pc, l.dev)), 1) * 1.15;
+  // gráfico: mensalidade (cor da situação) + avulsos empilhados, com o devido tracejado
+  const W = 1040, H = 250, ml = 92, mr = 16, mt = 16, mb = 30, mx = Math.max(...linhas.map((l) => Math.max(l.pc + l.pa, l.dev)), 1) * 1.12;
   const y = (v) => mt + (H - mt - mb) * (1 - v / mx), bw = (W - ml - mr) / Math.max(1, linhas.length), w = Math.min(40, bw * 0.55);
-  let g = [0, 0.5, 1].map((f) => `<line x1="${ml}" x2="${W - mr}" y1="${y(mx * f)}" y2="${y(mx * f)}" stroke="#e3e9ef"/><text x="${ml - 8}" y="${y(mx * f) + 4}" text-anchor="end">${brl(mx * f).replace(",00", "")}</text>`).join("");
+  const COR = { ok: "#2a9d8f", explicado: "#5b9bd5", parcial: "#e0a100", sem: "#d9663a", ausente: "#b4231a", aguarda: "#9aa7b3", pago: "#2a9d8f", nada: "#9aa7b3", dif: "#d9663a" };
+  let g = [0, 0.5, 1].map((f) => `<line x1="${ml}" x2="${W - mr}" y1="${y(mx * f)}" y2="${y(mx * f)}" stroke="var(--grade, #e3e9ef)"/><text x="${ml - 8}" y="${y(mx * f) + 4}" text-anchor="end">${brl(mx * f).replace(",00", "")}</text>`).join("");
   linhas.forEach((l, i) => {
-    const cx = ml + i * bw + bw / 2, cor = !l.pc ? "#d9663a" : l.difC > l.dev * 0.02 ? "#e0a100" : "#2a9d8f";
-    if (l.pc) g += `<rect x="${cx - w / 2}" y="${y(l.pc)}" width="${w}" height="${y(0) - y(l.pc)}" rx="4" fill="${cor}" data-tip="${esc(`Competência ${rotuloMes(l.mes)}\nPago: ${brl(l.pc)}\nDevido: ${brl(l.dev)}\nNF: ${l.comp.map((d) => d.nf).join(", ")}`)}"/>`;
-    else g += `<text x="${cx}" y="${y(0) - 6}" text-anchor="middle" style="fill:#b4231a;font-weight:700">0</text>`;
+    const cx = ml + i * bw + bw / 2;
+    if (l.pc) g += `<rect x="${cx - w / 2}" y="${y(l.pc)}" width="${w}" height="${y(0) - y(l.pc)}" rx="4" fill="${COR[l.st]}" data-tip="${esc(`Competência ${rotuloMes(l.mes)}\nMensalidade: ${brl(l.pc)}\nDevido: ${brl(l.dev)}\n${ST_CT[l.st][0]}`)}"/>`;
+    if (l.pa) g += `<rect x="${cx - w / 2}" y="${y(l.pc + l.pa) + (l.pc ? 0 : 0)}" width="${w}" height="${Math.max(2, y(l.pc) - y(l.pc + l.pa) - 2)}" rx="4" fill="#8e7cc3" opacity=".75" data-tip="${esc(`Avulsos em ${rotuloMes(l.mes)}: ${brl(l.pa)}\n${l.A.map((d) => `${d.item} ${brl(d.v)}`).join("\n")}`)}"/>`;
+    if (!l.pc && !l.pa && l.dev) g += `<text x="${cx}" y="${y(0) - 6}" text-anchor="middle" style="fill:#b4231a;font-weight:700">0</text>`;
     g += `<line x1="${cx - bw / 2 + 4}" x2="${cx + bw / 2 - 4}" y1="${y(l.dev)}" y2="${y(l.dev)}" stroke="#054166" stroke-width="2.5" stroke-dasharray="5 4"/>`;
-    g += `<text x="${cx}" y="${H - 10}" text-anchor="middle" class="eixo-x">${rotuloMes(l.mes).replace("/20", "/")}</text>`;
+    g += `<text x="${cx}" y="${H - 9}" text-anchor="middle" class="eixo-x">${rotCurto(l.mes)}</text>`;
   });
-  const nfs = (arr) => arr.map((d) => `<span class="nf-tag" title="${esc(d.desc)}">${/^\d/.test(d.nf || "") ? "NF " + esc(d.nf) : esc(d.nf || "s/n")} · ${brl(d.v)} · baixa ${esc(String(d.baixa).slice(0, 5))}</span>`).join("");
+  // barra de composição do que foi pago
+  const partes = [["Mensalidade dentro do contrato", cp.base, "#2a9d8f"], ["Acima, explicado", cp.acimaExpl, "#5b9bd5"], ["Acima, sem explicação", cp.semExpl, "#d9663a"], ["Avulsos previstos", cp.aPrev, "#8e7cc3"], ["Avulsos sem previsão", cp.aSem, "#c2185b"]].filter((p) => p[1] > 0.009);
+  const totComp = partes.reduce((s2, p) => s2 + p[1], 0) || 1;
+  const tags = (l) => [...l.P.map((d) => `<span class="nf-tag" title="${esc(d.desc)}">${/^\d/.test(d.nf || "") ? "NF " + esc(d.nf) : esc(d.nf || "s/n")} · ${brl(d.v)} · baixa ${esc(String(d.baixa).slice(0, 5))}${E.modo === "nf" && E.seq?.get(d) && E.seq.get(d) !== d.compBal ? ` <i>informada ${rotCurto(d.compBal)}</i>` : ""}</span>`),
+    ...l.A.map((d) => `<span class="nf-tag av" title="${esc(d.desc)}">${esc((d.item || "Avulso").toLowerCase())} · ${brl(d.v)} · ${esc(d.nf || "s/n")}</span>`)].join("");
+  const mostrar = linhas.filter((l) => !S.ctSoDif || l.st !== "ok" || l.A.length);
+  const nAten = linhas.filter((l) => !["ok", "explicado", "aguarda", "nada"].includes(l.st)).length;
   return `<div class="card ficha-ct">
     <div class="cab"><div class="cab-secao"><span class="eyebrow">Ficha do contrato</span><h2>${esc(c.forn)}</h2></div><button type="button" class="link-x" data-ct-ficha="${c.id}" aria-label="Fechar">×</button></div>
     <dl class="ficha-dados">
@@ -3475,39 +3774,45 @@ function fichaContrato(c) {
       <div><dt>Vigência</dt><dd>${c.inicio ? (c.inicio.length === 10 ? dataBR(c.inicio) : rotuloMes(c.inicio)) : "—"} a ${fim ? dataBR(fim) : "indeterminado"}${c.prazoMeses ? ` · períodos de ${c.prazoMeses} meses` : ""}${c.renovacaoAuto ? " · renovação automática" : ""}</dd></div>
       ${avisoData ? `<div><dt>Aviso para não renovar</dt><dd>até ${dataBR(avisoData)} (${c.avisoDias} dias antes)</dd></div>` : ""}
       ${c.reajuste ? `<div><dt>Reajuste</dt><dd>${esc(c.reajuste)}</dd></div>` : ""}
-      ${(c.adicionais || []).length ? `<div><dt>Valores avulsos previstos</dt><dd>${c.adicionais.map((x) => `${brl(x.valor)} ${esc(x.desc)}`).join(" · ")}</dd></div>` : ""}
+      ${(c.adicionais || []).length ? `<div><dt>Valores avulsos previstos</dt><dd>${c.adicionais.map((x) => esc(txtAdic(x))).join(" · ")}</dd></div>` : ""}
       ${c.multa ? `<div><dt>Multa por atraso</dt><dd>${esc(c.multa)}</dd></div>` : ""}
       ${c.multaRescisoria ? `<div><dt>Rescisão</dt><dd>${esc(c.multaRescisoria)}</dd></div>` : ""}
       ${(c.info || []).map((x) => `<div><dt>${esc(x.rot)}</dt><dd>${esc(x.txt)}</dd></div>`).join("")}
+      <div><dt>Mensalidade nos balancetes</dt><dd>${c.filtro ? `lançamentos com “${esc(c.filtro)}”` : c.itemAuto ? `histórico “${esc(c.itemAuto)}” (identificado pelo valor); os demais pagamentos ao fornecedor são tratados como avulsos` : "todos os pagamentos ao fornecedor"}</dd></div>
     </dl>
     ${(c.clausulas || []).length ? `<details class="clausulas-ct"><summary>Cláusulas do contrato (${c.clausulas.length})</summary><ol>${c.clausulas.map((x) => `<li>${esc(x)}</li>`).join("")}</ol></details>` : ""}
-    <div class="kpis-sec" style="margin-top:14px">
-      <div class="kpi"><span class="eyebrow">${ehCumulativo(c) ? "Valor do contrato" : "Devido pelo contrato"}</span><b>${brl(an.totDev)}</b><span class="det">${ehCumulativo(c) ? `${c.modalidade === "anual" ? "por ano de vigência" : "valor global"} · ${an.totDev ? pct(an.totPago / an.totDev) : "—"} já pago` : `${an.meses.length} mês(es)${c.modalidade === "parcelado" ? ` · ${c.parcelas} parcela(s)` : ", com proporcional"}`}</span></div>
-      <div class="kpi ${an.dif > 0.01 ? "neg" : "pos"}"><span class="eyebrow">Pago ${c.filtro ? "(contrato)" : ""}</span><b>${brl(an.totPago)}</b><span class="det">${an.dif > 0.01 ? `${brl(an.dif)} acima` : an.dif < -0.01 ? `${brl(-an.dif)} abaixo` : "igual ao devido"}</span></div>
-      <div class="kpi"><span class="eyebrow">Outros pagamentos ao fornecedor</span><b>${brl(foraL.reduce((s2, d) => s2 + d.v, 0))}</b><span class="det">${foraL.length} lançamento(s) fora da mensalidade</span></div>
-      <div class="kpi"><span class="eyebrow">Total pago ao fornecedor</span><b>${brl(an.totPago + foraL.reduce((s2, d) => s2 + d.v, 0))}</b><span class="det">no período dos balancetes</span></div>
+    ${ehAdmin() ? `<div class="acoes" style="margin-top:8px"><label class="btn sec"><input type="file" data-ct-reler="${c.id}" accept="application/pdf,.pdf,.docx,.txt,image/*" hidden>Atualizar com o PDF do contrato</label><span class="mini" id="ctRelerMsg">Relê o contrato e completa cláusulas, avulsos previstos, honorários e multas, sem mudar valor nem datas.</span></div>` : ""}
+
+    <section class="diag-ct">
+      <div class="cab-secao"><span class="eyebrow">Diagnóstico</span><h3>O que explica cada real pago</h3></div>
+      <p class="diag-tot">Pagos <b>${brl(cp.totP + cp.totA)}</b> ao fornecedor de ${linhas[0] ? rotCurto(linhas[0].mes) : "—"} a ${linhas.at(-1) ? rotCurto(linhas.at(-1).mes) : "—"}, contra <b>${brl(an.totDev)}</b> de mensalidades devidas. ${nAten ? `${nAten} competência(s) pedem atenção.` : "Todas as competências estão conformes ou explicadas."}</p>
+      <div class="comp-barra" role="img" aria-label="Composição do valor pago">${partes.map((p) => `<span style="flex:${p[1] / totComp};background:${p[2]}" data-tip="${esc(`${p[0]}: ${brl(p[1])} (${pct(p[1] / totComp)})`)}"></span>`).join("")}</div>
+      <div class="legenda comp-leg">${partes.map((p) => `<span><i style="background:${p[2]}"></i>${p[0]} <b>${brl(p[1])}</b></span>`).join("")}</div>
+      ${E.ach.length ? `<ul class="achados">${E.ach.map(([nv, tit, txt]) => `<li class="${NIVEL[nv][1]}"><span class="st-ct ${NIVEL[nv][1]}">${NIVEL[nv][0]}</span><b>${esc(tit)}.</b> ${esc(txt)}</li>`).join("")}</ul>` : '<p class="muted">Pagamentos conferem com o contrato.</p>'}
+    </section>
+
+    <div class="cab-secao" style="margin-top:16px"><span class="eyebrow">Por competência</span><h3>Mensalidade e avulsos em cada mês de serviço</h3></div>
+    <div class="legenda" style="margin:6px 0">${[["ok", "Conforme"], ["explicado", "Diferença explicada"], ["parcial", "Explicada em parte"], ["sem", "Sem explicação"]].map(([k, t2]) => `<span><i style="background:${COR[k]}"></i>${t2}</span>`).join("")}<span><i style="background:#8e7cc3"></i>Avulsos</span><span><i class="linha" style="background:#054166"></i>Devido</span></div>
+    <div class="grafico-largo"><svg class="g" viewBox="0 0 ${W} ${H}" role="img" aria-label="Mensalidade e avulsos por competência">${g}</svg></div>
+    <div class="ct-tab-ctl">
+      ${E.seq ? `<div class="chips" role="group" aria-label="Competência"><span class="mini">Competência:</span><button type="button" class="chip" data-ct-modo="nf" aria-pressed="${E.modo === "nf"}">Pela ordem das notas</button><button type="button" class="chip" data-ct-modo="bal" aria-pressed="${E.modo === "bal"}">Como informada no balancete</button></div>` : "<span></span>"}
+      <label class="check mini"><input type="checkbox" id="ctSoDif" ${S.ctSoDif ? "checked" : ""}> Só meses com diferença ou avulsos</label>
     </div>
-    <div class="cab-secao" style="margin-top:16px"><span class="eyebrow">Por competência</span><h3>Pago x devido em cada mês de serviço</h3></div>
-    <div class="legenda" style="margin:6px 0"><span><i style="background:#2a9d8f"></i>Conforme</span><span><i style="background:#e0a100"></i>Acima/abaixo do devido</span><span><i class="linha" style="background:#054166"></i>Devido</span></div>
-    <div class="grafico-largo"><svg class="g" viewBox="0 0 ${W} ${H}" role="img" aria-label="Pago por competência e valor devido">${g}</svg></div>
-    <div class="tabela ficha-tab"><table><colgroup><col style="width:9%"><col style="width:12%"><col style="width:37%"><col style="width:13%"><col style="width:14%"><col style="width:15%"></colgroup><thead><tr><th>Mês</th><th class="n">Devido</th><th>Pagamentos da competência</th><th class="n">Pago</th><th class="n">Diferença</th><th class="n">Acumulado</th></tr></thead><tbody>
-      ${linhas.map((l) => { acum = r2(acum + l.difC); return `<tr class="${l.comp.length > 1 ? "linha-venc" : ""}"><td title="${esc(l.pagos.length ? "Pago no balancete deste mês: " + l.pagos.map((d) => `NF ${d.nf || "s/n"} (comp. ${d.ref || "?"})`).join(", ") : "Nada pago no balancete deste mês")}"><b>${rotuloMes(l.mes).replace("/20", "/")}</b></td><td class="n">${brl(l.dev)}</td>
-        <td>${l.comp.length ? nfs(l.comp) : l.mes === ultBal ? '<span class="mini">paga no balancete seguinte</span>' : '<span class="sit pendente">sem pagamento</span>'}${l.comp.length > 1 ? '<span class="aviso-dup">paga mais de uma vez</span>' : ""}</td>
-        <td class="n">${brl(l.pc)}</td><td class="n ${l.difC > 0.01 ? "neg" : l.difC < -0.01 ? "pos" : ""}">${l.difC > 0 ? "+" : ""}${brl(l.difC)}</td><td class="n ${acum > 0.01 ? "neg" : ""}">${acum > 0 ? "+" : ""}${brl(acum)}</td></tr>`; }).join("")}
-      <tr class="total"><td>Total</td><td class="n">${brl(an.totDev)}</td><td></td><td class="n">${brl(linhas.reduce((s2, l) => s2 + l.pc, 0))}</td><td class="n">${brl(linhas.reduce((s2, l) => s2 + l.difC, 0))}</td><td></td></tr>
+    <div class="tabela ficha-tab"><table><colgroup><col style="width:11%"><col style="width:14%"><col style="width:15%"><col style="width:14%"><col style="width:15%"><col style="width:31%"></colgroup>
+      <thead><tr><th>Mês</th><th class="n">Devido</th><th class="n">Mensalidade</th><th class="n">Avulsos</th><th class="n">Diferença</th><th>Situação</th></tr></thead><tbody>
+      ${mostrar.map((l) => `<tr class="ct-lin ${ST_CT[l.st][1]}"><td><b>${rotCurto(l.mes)}</b></td><td class="n">${brl(l.dev)}</td><td class="n">${brl(l.pc)}</td><td class="n">${l.pa ? brl(l.pa) : "—"}</td><td class="n ${l.dif > 0.01 ? "neg" : l.dif < -0.01 ? "pos" : ""}">${l.dif > 0 ? "+" : ""}${brl(l.dif)}</td><td><span class="st-ct ${ST_CT[l.st][1]}">${ST_CT[l.st][0]}</span>${l.resto > 0 && l.st === "parcial" ? ` <span class="mini neg">${brl(l.resto)} sem explicação</span>` : ""}</td></tr>
+        ${l.P.length || l.A.length || l.ex.length ? `<tr class="ct-det ${ST_CT[l.st][1]}"><td colspan="6"><div class="ct-det-in"><div class="ct-det-nfs">${tags(l) || '<span class="mini">nenhum pagamento</span>'}</div>${l.ex.length ? `<ul class="expl">${l.ex.map((x) => `<li class="e-${x.tipo}">${esc(x.txt)}</li>`).join("")}</ul>` : ""}</div></td></tr>` : ""}`).join("")}
+      <tr class="total"><td>Total</td><td class="n">${brl(an.totDev)}</td><td class="n">${brl(cp.totP)}</td><td class="n">${brl(cp.totA)}</td><td class="n">${brl(r2(cp.totP - an.totDev))}</td><td>${cp.semExpl ? `<span class="mini neg">${brl(cp.semExpl)} sem explicação</span>` : ""}</td></tr>
     </tbody></table></div>
-    ${foraL.length ? `<div class="cab-secao" style="margin-top:16px"><span class="eyebrow">Fora da mensalidade</span><h3>Outros pagamentos ao fornecedor</h3></div>
-    <div class="tabela"><table><thead><tr><th>Balancete</th><th>Histórico</th><th>NF</th><th>Baixa</th><th class="n">Valor</th></tr></thead><tbody>
-      ${foraL.map((d) => `<tr><td>${rotuloMes(d.mesBal)}</td><td>${esc(d.desc)}</td><td>${esc(d.nf || "")}</td><td>${esc(d.baixa)}</td><td class="n">${brl(d.v)}</td></tr>`).join("")}</tbody></table></div>` : ""}
-    <div class="cab-secao" style="margin-top:16px"><span class="eyebrow">Para questionar</span><h3>Pontos encontrados</h3></div>
+    <div class="cab-secao" style="margin-top:16px"><span class="eyebrow">Para questionar</span><h3>Perguntas ao síndico e à administradora</h3></div>
     ${perguntas.length ? `<ol class="perguntas-ct">${perguntas.map((q) => `<li>${esc(q)}</li>`).join("")}</ol>
       <div class="acoes"><button class="btn sec" type="button" id="ctCopiarPerg">Copiar perguntas</button>${avisoData && pode() ? `<button class="btn sec" type="button" data-ct-agenda="${c.id}">Pôr o prazo de aviso na agenda</button>` : ""}</div>`
-      : `<p class="muted">Pagamentos conferem com o contrato.</p>${avisoData && pode() ? `<div class="acoes"><button class="btn sec" type="button" data-ct-agenda="${c.id}">Pôr o prazo de aviso na agenda</button></div>` : ""}`}
+      : `<p class="muted">Nada a questionar: os pagamentos conferem ou estão explicados.</p>${avisoData && pode() ? `<div class="acoes"><button class="btn sec" type="button" data-ct-agenda="${c.id}">Pôr o prazo de aviso na agenda</button></div>` : ""}`}
   </div>`;
 }
 function formContrato(c) {
   const forns = porFornecedor(S.todos).map((f) => f.forn);
-  const ad = (c?.adicionais || []).map((x) => `${fmtValor(x.valor)} ${x.desc}`).join("; ");
+  const ad = (c?.adicionais || []).map((x) => x.pctSM ? `${x.pctSM}% SM ${x.desc}` : `${fmtValor(x.valor)} ${x.desc}`).join("; ");
   return `<div class="cab-secao"><span class="eyebrow">${c && c.id ? "Editar" : "Novo"} contrato</span><h2>${c && c.id ? esc(c.forn) : c && c.forn ? "Conferir dados lidos do PDF" : "Cadastrar contrato"}</h2></div>
     ${c && c.origem ? `<p class="small muted">Lido de "${esc(c.origem)}". Confira cada campo antes de salvar.</p>` : ""}
     <div class="form" style="margin-top:12px">
@@ -3531,7 +3836,7 @@ function formContrato(c) {
       <label>Reajuste<input id="ctReaj" value="${esc(c?.reajuste || "")}" placeholder="ex.: IPCA em janeiro"></label>
       <label>Multa por atraso<input id="ctMulta" value="${esc(c?.multa || "")}" placeholder="ex.: 2%"></label>
       <label>Multa por rescisão<input id="ctMultaR" value="${esc(c?.multaRescisoria || "")}" placeholder="ex.: 1 mensalidade"></label>
-      <label>Valores avulsos previstos<input id="ctAdic" value="${esc(ad)}" placeholder="ex.: 50,00 por certidão; 100,00 por audiência"></label>
+      <label>Valores avulsos previstos<input id="ctAdic" value="${esc(ad)}" placeholder="ex.: 50,00 por certidão; 40% SM acompanhamento em assembleia"></label>
       <label>Tolerância (%)<input id="ctTol" inputmode="decimal" value="${String(c?.tol ?? 2).replace(".", ",")}"></label>
       <label>Contar só lançamentos com o texto<input id="ctFiltro" value="${esc(c?.filtro || "")}" placeholder="ex.: ASSESSORIA (opcional)"></label>
       <label>Link do contrato<input id="ctLink" type="url" value="${esc(c?.link || "")}" placeholder="https:// (Google Drive, opcional)"></label>
@@ -3575,7 +3880,7 @@ async function importarContrato(f) {
       ${linha("Aviso prévio", C.avisoDias ? `${C.avisoDias} dias` : "", r.trechos.aviso)}
       ${linha("Vencimento", C.diaVenc ? `dia ${C.diaVenc}` : "")}
       ${linha("Reajuste", esc(C.reajuste || ""), r.trechos.reajuste)}
-      ${linha("Valores avulsos", (C.adicionais || []).map((x) => `${brl(x.valor)} ${esc(x.desc)}`).join(" · "))}
+      ${linha("Valores avulsos", (C.adicionais || []).map((x) => esc(txtAdic(x))).join(" · "))}
       ${linha("Multa por atraso", esc(C.multa || ""))}
       ${linha("Rescisão", esc(C.multaRescisoria || ""))}
       ${(C.info || []).map((x) => linha(esc(x.rot), esc(x.txt), r.trechos[x.rot])).join("")}
@@ -3586,6 +3891,9 @@ async function importarContrato(f) {
     registrar("Importou contrato", f.name);
   } catch (e) { msg(`Não foi possível ler "${f.name}": ${e.message}`); }
 }
+const SAL_MIN = { 2023: 1320, 2024: 1412, 2025: 1518, 2026: 1621 };
+const salMin = (ano) => SAL_MIN[ano] || SAL_MIN[Math.max(...Object.keys(SAL_MIN).map(Number).filter((a) => a <= ano))] || SAL_MIN[2026];
+const txtAdic = (x) => x.pctSM ? `${x.pctSM}% do salário mínimo ${x.desc.startsWith("por ") ? x.desc : "por " + x.desc}` : `${brl(x.valor)} ${x.desc}`;
 function descreverValor(c) {
   if (!c || (!c.valor && !c.valorTotal)) return "";
   if (c.modalidade === "parcelado") return `${c.valorTotal ? brl(c.valorTotal) + " em " : ""}${c.parcelas || "?"} parcela(s) de ${brl(c.valor)}`;
@@ -3594,7 +3902,7 @@ function descreverValor(c) {
   return `${brl(c.valor)} por mês`;
 }
 function lerFormContrato() {
-  const adic = $("#ctAdic").value.split(";").map((x) => x.trim()).filter(Boolean).map((x) => { const m = /^([\d.,]+)\s*(.*)$/.exec(x); return m ? { valor: parseValor(m[1]), desc: m[2] } : { valor: 0, desc: x }; });
+  const adic = $("#ctAdic").value.split(";").map((x) => x.trim()).filter(Boolean).map((x) => { const sm = /^(\d{1,3})\s*%\s*(?:SM|do sal[aá]rio m[ií]nimo)\s*(?:por\s+)?(.*)$/i.exec(x); if (sm) return { valor: 0, pctSM: +sm[1], desc: sm[2] }; const m = /^([\d.,]+)\s*(.*)$/.exec(x); return m ? { valor: parseValor(m[1]), desc: m[2] } : { valor: 0, desc: x }; });
   return { forn: $("#ctForn").value.trim(), numero: $("#ctNum").value.trim(), cnpj: $("#ctCnpj").value.trim(), objeto: $("#ctObj").value.trim(), valor: parseValor($("#ctValor").value),
     tipo: $("#ctTipo").value.trim(), modalidade: $("#ctModal").value, valorTotal: parseValor($("#ctTotal").value) || null, parcelas: +$("#ctParc").value || null, formaPagamento: $("#ctFormaPg").value.trim(), multaRescisoria: $("#ctMultaR").value.trim(), indeterminado: $("#ctIndet").checked,
     diaVenc: +$("#ctDia").value || null, inicio: $("#ctIni").value, prazoMeses: +$("#ctPrazo").value || null, renovacaoAuto: $("#ctRenova").checked, fim: $("#ctFim").value,
@@ -3877,7 +4185,30 @@ $("#bannerNovoVer").addEventListener("click", () => { marcarVisto(); location.ha
 $("#bannerNovoFechar").addEventListener("click", marcarVisto);
 $("#btnGerarAta").addEventListener("click", gerarAta);
 document.addEventListener("input", (e) => { if (e.target.id === "ctBusca") { S.ctBusca = e.target.value; clearTimeout(S.tBusca); S.tBusca = setTimeout(() => { contratosTab(); const i = $("#ctBusca"); i.focus(); i.setSelectionRange(i.value.length, i.value.length); }, 250); } });
-document.addEventListener("change", (e) => { if (e.target.id === "ctArquivo" && e.target.files.length) { importarContrato(e.target.files[0]); e.target.value = ""; } });
+document.addEventListener("change", (e) => {
+  if (e.target.id === "ctArquivo" && e.target.files.length) { importarContrato(e.target.files[0]); e.target.value = ""; }
+  if (e.target.id === "ctSoDif") { S.ctSoDif = e.target.checked; contratosTab(); $("#ctFicha .ct-tab-ctl")?.scrollIntoView({ block: "center" }); }
+  if (e.target.dataset && e.target.dataset.ctReler && e.target.files.length) { relerContrato(e.target.dataset.ctReler, e.target.files[0]); e.target.value = ""; }
+});
+// relê o PDF de um contrato já cadastrado e completa o que faltava, sem mexer em valor, datas e fornecedor
+async function relerContrato(id, f) {
+  const c = S.contratos.find((x) => x.id === id), msg = (t) => { const el = $("#ctRelerMsg"); if (el) el.textContent = t; };
+  if (!c || !ehAdmin()) return;
+  try {
+    const { texto } = await textoDoArquivo(carregarPdfjs, f, msg);
+    const C = lerContrato(texto, porFornecedor(S.todos).map((x) => x.forn)).campos, mud = [];
+    const novo = { ...c };
+    if ((C.info || []).length) { novo.info = [...(C.info || []), ...(c.info || []).filter((x) => !(C.info || []).some((y) => y.rot === x.rot))]; mud.push("informações"); }
+    if ((C.adicionais || []).length) { novo.adicionais = C.adicionais; mud.push("avulsos previstos"); }
+    if ((C.clausulas || []).length) { novo.clausulas = C.clausulas; mud.push("cláusulas"); }
+    for (const k of ["multa", "reajuste", "multaRescisoria", "numero", "cnpj", "contratado", "assinatura", "objeto", "tipo", "formaPagamento", "diaVenc", "avisoDias"]) if (!c[k] && C[k]) { novo[k] = C[k]; mud.push(k); }
+    if (C.valor && c.valor && Math.abs(C.valor - c.valor) > 0.01) mud.push(`atenção: o PDF diz ${brl(C.valor)}, o cadastro tem ${brl(c.valor)} (não alterado)`);
+    novo.origem = f.name; novo.ts = new Date().toISOString(); novo.por = nomeUsuario();
+    const antes = S.contratos; S.contratos = S.contratos.map((x) => (x.id === id ? novo : x));
+    try { await salvarConteudo("contratos"); registrar("Atualizou contrato pelo PDF", `${c.forn}: ${mud.join(", ")}`); contratosTab(); toast(mud.length ? `Contrato atualizado: ${mud.join(", ")}.` : "Nada novo no PDF."); }
+    catch (err) { S.contratos = antes; msg(mensagemErro(err)); }
+  } catch (err) { msg(`Não consegui ler o arquivo: ${err.message || err}`); }
+}
 for (const id of ["#btnBackup", "#btnBackup2"]) $(id)?.addEventListener("click", baixarBackup);
 $("#regPessoa").addEventListener("change", pintarRegistros);
 $("#regAtualizar").addEventListener("click", listarRegistros);
@@ -3913,6 +4244,7 @@ document.addEventListener("click", async (e) => {
   }
   // contratos
   const ce = t.closest("[data-ct-edit]"); if (ce) { S.ctEditando = ce.dataset.ctEdit; S.ctRascunho = null; contratosTab(); $("#fContrato").scrollIntoView({ block: "center" }); return; }
+  const cmo = t.closest("[data-ct-modo]"); if (cmo) { S.ctModoComp = cmo.dataset.ctModo; contratosTab(); $("#ctFicha .ct-tab-ctl")?.scrollIntoView({ block: "center" }); return; }
   const cfl = t.closest("[data-ct-filtro]"); if (cfl) { S.ctFiltro = cfl.dataset.ctFiltro; contratosTab(); return; }
   if (t.closest("#ctCancelar")) { S.ctEditando = ""; S.ctRascunho = null; contratosTab(); return; }
   const cf = t.closest("[data-ct-ficha]"); if (cf) { S.ctFicha = S.ctFicha === cf.dataset.ctFicha ? "" : cf.dataset.ctFicha; contratosTab(); if (S.ctFicha) $("#ctFicha").scrollIntoView({ block: "start" }); return; }

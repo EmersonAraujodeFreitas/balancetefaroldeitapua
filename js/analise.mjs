@@ -256,7 +256,7 @@ export function alertas(meses) {
     const igual = new Set(g.map((d) => d.v)).size === 1;
     add(igual ? "media" : "baixa", "Pagamento em duplicidade", `Energia: UC ${u}, referência ${ref}, ${kw} kWh, paga ${g.length} vezes`,
       g.map((d) => `${rotuloMes(d.mes)} – baixa ${d.baixa} – NF ${d.nf} – ${fmt(d.v)}`).join("\n") + "\nMesma unidade, mesmo mês e mesmo consumo, com notas fiscais diferentes.",
-      `As faturas ${g.map((d) => d.nf).join(" e ")} da UC ${u} são a mesma conta paga duas vezes? Se sim, a Coelba creditou a diferença?`, g.map((d) => d.id), g.at(-1).mes, "Coelba (energia)");
+      `As faturas ${g.map((d) => d.nf).join(" e ")} da UC ${u} são a mesma conta paga duas vezes? Se sim, a Coelba creditou a diferença?`, g.map((d) => d.id), g.at(-1).mes, "Coelba");
   }
   if (refErradas.length) add("baixa", "Qualidade do balancete", `${refErradas.length} lançamento(s) com mês de referência posterior ao pagamento`,
     refErradas.map((d) => `${rotuloMes(d.mes)} – ${d.forn} – ref. ${d.ref}, pago em ${d.baixa} – ${fmt(d.v)}`).join("\n") + "\nProvável erro de digitação da administradora; dificulta conferir o que já foi pago.",
@@ -350,7 +350,7 @@ export function alertas(meses) {
   if (ordem.length >= 4) {
     const ultimos2 = new Set(ordem.slice(-2)), janela = new Set(ordem.slice(-8, -2));
     for (const f of porFornecedor(meses)) {
-      if (/banco|receita federal/i.test(f.forn)) continue;
+      if (/sicoob|bradesco|banco|receita federal/i.test(f.forn)) continue;
       const naJanela = [...f.meses].filter((m) => janela.has(m)).length;
       if (L.filter((d) => d.forn === f.forn && janela.has(d.mes)).every((d) => PARC.test(d.desc))) continue;
       const recente = [...f.meses].some((m) => ultimos2.has(m));

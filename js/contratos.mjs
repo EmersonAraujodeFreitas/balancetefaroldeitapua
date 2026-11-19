@@ -210,7 +210,16 @@ export function lerContrato(textoBruto, forns = []) {
     if (x === principal || x === glob || x === parc) continue;
     if (ehAvulso(x)) { const p = /(?:por|cada)\s+([a-z0-9 ]{3,30}?)(?=[,.;]|\s+e\s|\s+mais|$)/.exec(x.depois) || /(hora tecnica|preposto|taxa de [a-z]+)/.exec(x.antes.slice(-50)); C.adicionais.push({ valor: x.v, desc: /preposto/.test(x.depois.slice(0, 80) + x.antes.slice(-50)) ? "preposto por audiência" : p ? (x.depois.match(/^\s*(?:\([^)]*\)\s*)?(por|cada)/) ? "por " : "") + p[1].trim() : "valor avulso" }); }
   }
-  C.adicionais = C.adicionais.filter((x, i, a) => a.findIndex((y) => y.valor === x.valor && y.desc === x.desc) === i);
+  // valores avulsos fixados em percentual do salário mínimo (ex.: assembleias, atas)
+  for (const x of todos(/(?:custo|valor|importancia|honorarios?)\s+(?:de\s+)?(\d{1,3})\s*%\s*(?:\([^)]*\)\s*)?d[oe]\s+salario[- ]minimo/g)) {
+    const i0 = Math.max(0, x.index - 260); let ctx = n.slice(i0, x.index + 220);
+    const al = [...ctx.slice(0, x.index - i0).matchAll(/(?:^|[\s;:])[a-z]\)\s/g)].at(-1), base = i0 + (al ? al.index : 0); if (al) ctx = ctx.slice(al.index);
+    const fim = ctx.search(/;\s*[a-z]\)\s|:\s*[a-z]\)\s/); if (fim > 0) ctx = ctx.slice(0, fim);
+    const desc = /assembl/.test(ctx) && /acompanha|presenc|particip/.test(ctx) ? "acompanhamento em assembleia" : /\bata/.test(ctx) ? "elaboração de ata" : /audienc/.test(ctx) ? "audiência" : /notifica/.test(ctx) ? "notificação" : "serviço avulso";
+    const salvo = /(?:salvo|exceto|ressalvad[oa]s?)\s+([^:;]{4,120}?)(?=,?\s*face|[:;]|$)/.exec(ctx);
+    C.adicionais.push({ valor: 0, pctSM: +x[1], desc: desc + (salvo ? `, exceto ${(n.length === t.length ? t.substr(base + salvo.index + salvo[0].indexOf(salvo[1]), salvo[1].length) : salvo[1]).trim()}` : "") });
+  }
+  C.adicionais = C.adicionais.filter((x, i, a) => a.findIndex((y) => y.valor === x.valor && y.desc === x.desc && y.pctSM === x.pctSM) === i);
   // seguro: coberturas e franquias
   const cobs = todos(/([a-zà-ú ,/]{4,60}?)\s*[-–:]\s*(?:lmi|limite maximo de indenizacao|importancia segurada)\s*:?\s*r\$\s?([\d.,]+)/g).map((x) => `${t.substr(x.index, x[1].length).trim()}: R$ ${t.substr(x.index + x[0].length - x[2].length, x[2].length)}`);
   if (cobs.length) info("Coberturas", cobs.join("; "));
@@ -256,6 +265,17 @@ export function lerContrato(textoBruto, forns = []) {
   for (const x of todos(/multa/g)) { const f2 = frase(x.index), fn = ctNorm(f2); if (/rescis|rescind|cancelament|rompiment|resili|infrac|infrator|descumpr|fidelidade/.test(fn) && !/atraso no (pagamento|recebimento)|juros/.test(fn) && f2.length < 470) { C.multaRescisoria = f2.replace(/^[a-z]\)\s*/i, ""); break; } }
   m = um(/atraso no (?:pagamento|recebimento)[^.]{0,160}?multa\s+(?:moratoria\s+)?(?:de\s+)?(\d{1,2}(?:,\d+)?)\s*%/) || todos(/multa\s+(?:moratoria\s+)?(?:de\s+)?(\d{1,2}(?:,\d+)?)\s*%[^.]{0,80}?(?:atraso|inadimpl|vencimento)/g).find((x) => !/por dia de atraso|entrega|execucao|conclusao/.test(x[0])) || um(/(?:nao cumprimento|inadimplemento)[^.]{0,120}?multa\s+de\s+(\d{1,2}(?:,\d+)?)\s*%/);
   if (m) { const j = /juros\s+(?:de\s+)?(\d{1,2}(?:,\d+)?)\s*%/.exec(n.slice(m.index, m.index + 220)); C.multa = `${m[1]}%${j ? ` + juros de ${j[1]}% ao mês` : ""}`; }
+  if (!C.multa) { m = um(/vencimentos?\.?\s+importara\s+em\s+multa\s+(?:de\s+)?(\d{1,2}(?:,\d+)?)\s*%/); if (m) { const j = /juros\s+(?:de\s+)?(\d{1,2}(?:,\d+)?)\s*%/.exec(n.slice(m.index, m.index + 220)); C.multa = `${m[1]}%${j ? ` + juros de ${j[1]}% ao mês` : ""}`; } }
+  // honorários de êxito e quem paga
+  { const ocs = todos(/ad exitum|a titulos? (?:de )?exito|exito nas (?:demandas|recuperac)|honorarios[^.]{0,40}exito/g);
+    const qt = (y) => (n.slice(Math.max(0, y.index - 350), y.index + 150).match(/\d{1,2}\s*%/g) || []).length;
+    const x = [...ocs].sort((a, b) => qt(b) - qt(a))[0];
+    if (x) { const win = n.slice(Math.max(0, x.index - 350), x.index + 150); const pcts = [...win.matchAll(/(\d{1,2})\s*%\s*(?:\([^)]*\))?,?\s*(?:este |esta )?(na via administrativa|independente de intervencao judicial|judicia\w*)?/g)].map((y) => `${y[1]}%${y[2] ? (/administrativa/.test(y[2]) ? " na via administrativa" : " na via judicial") : ""}`);
+      info("Honorários de êxito", pcts.length ? `${[...new Set(pcts)].join("; ")}, sobre o valor que o condomínio efetivamente receber` : frase(x.index), x.index); } }
+  m = um(/repasses?\s+e\s+nao\s+despesas?\s+d[oa]\s+contratante|pagos?\s+pelos?\s+inadimplentes|(?:custas|honorarios)[^.]{0,80}(?:repassad|revertid|revestid)[oa]s?\s+a[oa]?s?\s+(?:proprio\s+)?(?:condomino\s+)?inadimplente/);
+  if (m) info("Quem paga o êxito", "O contrato diz que os honorários de êxito são pagos pelos inadimplentes (repasse), não são despesa do condomínio.", m.index);
+  m = um(/(?:custas|emolumentos|despesas)[^.]{0,200}?(?:deverao ser restituid|serao reembolsad|devem ser reembolsad|deverao ser reembolsad|restituidos pel)/);
+  if (m) info("Reembolso de despesas", "Custas, emolumentos e taxas pagos pelo contratado são reembolsados pelo condomínio, mediante comprovação.", m.index);
   m = um(/multa\s+de\s+(\d{1,2}(?:,\d+)?)\s*%[^.]{0,40}?por dia de atraso[^.]*/); if (m) info("Multa por atraso na execução", t.substr(m.index, m[0].length).trim(), m.index);
 
   // ---- reajuste
