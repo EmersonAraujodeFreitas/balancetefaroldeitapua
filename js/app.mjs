@@ -1654,7 +1654,9 @@ function explicarContrato(c0) {
     if (cents.length >= 2 && !c.valorLiquido) txt += ` Os valores variam e têm centavos (${cents.slice(0, 3).map((l) => brl(l.pc)).join(", ")}…), sinal de que cada nota soma itens diferentes: peça a composição de cada nota.`;
     if (exito) txt += ` O contrato prevê honorários de êxito (${exito.txt})${quem ? ", mas diz que eles são pagos pelos inadimplentes (repasse) e não são despesa do condomínio. Se o excedente for êxito, ele não deveria sair do caixa do condomínio" : ""}.`;
     else if (!(c.info || []).length && !(c.adicionais || []).length && c.origem === "") txt += " Importe o PDF do contrato para cruzar com as cláusulas.";
-    ach.push(["sem", "Valor acima do contrato", txt]);
+    const secA = (S.contratos || []).find((x) => x.securitizacao);
+    if (secA && trabalhaPara(c, secA)) txt = `De ${rotCurto(acima[0].mes)} a ${rotCurto(acima.at(-1).mes)}, a mensalidade paga ficou acima do contrato em ${acima.length} de ${depois.length} meses: em média ${brl(med)} contra ${brl(c.valor)} (+${pct(med / c.valor - 1)}), ${brl(semExpl)} no total. Nenhuma cláusula sustenta esse valor: o reajuste só vale a partir de ${aniv ? rotCurto(aniv) : "um ano de contrato"}, as assembleias e atas são cobradas à parte, e os honorários de êxito são pagos pelos inadimplentes. Como a ${c.forn} também é contratada da ${secA.forn} para cobrar os inadimplentes, trabalho pago com os encargos do devedor, o excedente pago pelo condomínio é indevido e, se for pela cobrança, foi pago em duplicidade.`;
+    ach.push(["sem", secA && trabalhaPara(c, secA) ? "Valor acima do contrato: indevido" : "Valor acima do contrato", txt]);
   }
   if (!c.filtro && !ehCumulativo(c) && c.valor) {
     const rec = itensRecorrentes(c.forn), perto = L.filter((d) => !ehParcela(d) && Math.abs(d.v - c.valor) <= c.valor * 0.15).length >= 2;
@@ -1667,11 +1669,14 @@ function explicarContrato(c0) {
   if (avs.length) {
     const grupos = {}; for (const d of avs) { const pv = ehParcela(d) ? null : previsaoAvulso(c, d), k = d.ret ? "retenções sobre esses itens" : ehParcela(d) ? "compras parceladas" : pv ? pv.nome : (d.item || "outros").toLowerCase(); (grupos[k] ||= []).push(d); }
     const exc = avs.filter((d) => !ehParcela(d)).map((d) => previsaoAvulso(c, d)).find((p) => p && p.excecao);
-    ach.push([aSem > 0 ? "sem" : "provavel", "Pagamentos fora da mensalidade", `${brl(totA)} em ${avs.length} pagamento(s): ${Object.entries(grupos).map(([k, v]) => `${k} ${brl(v.reduce((s2, d) => s2 + d.v, 0))} (${v.length})`).join("; ")}. ${[aPrev ? `${brl(aPrev)} têm previsão no contrato` : "", aParc ? `${brl(aParc)} são parcelas de compras` : "", aSem ? `${brl(aSem)} sem previsão no contrato cadastrado (serviços e compras à parte, que precisam de orçamento e aprovação próprios)` : ""].filter(Boolean).join("; ")}.${exc ? ` O contrato prevê ${exc.excecao}: confira se as cobranças estão entre elas.` : ""}`]);
+    const assV = r2(avs.filter((d) => /assembl/.test(normTxt(`${d.item} ${d.desc}`))).reduce((s2, d) => s2 + d.v, 0)), cartV = r2(avs.filter((d) => /cartor|registro|custas/.test(normTxt(`${d.item} ${d.desc}`))).reduce((s2, d) => s2 + d.v, 0));
+    if (exc && assV && cartV) ach.push(["provavel", "Pagamentos fora da mensalidade", `${brl(cartV)} de cartório e registro de atas são reembolso previsto no contrato: devidos, se houver comprovante. ${brl(assV)} de assembleias (${[...new Set(avs.filter((d) => /assembl/.test(normTxt(`${d.item} ${d.desc}`))).map((d) => (/(\d{2}\/\d{2}\/\d{4})/.exec(d.det || "") || [])[1]).filter(Boolean))].join(" e ")}) podem não ser devidos: o contrato isenta ${exc.excecao.replace(/^exceto\s*/, "")}.`]);
+    else ach.push([aSem > 0 ? "sem" : "provavel", "Pagamentos fora da mensalidade", `${brl(totA)} em ${avs.length} pagamento(s): ${Object.entries(grupos).map(([k, v]) => `${k} ${brl(v.reduce((s2, d) => s2 + d.v, 0))} (${v.length})`).join("; ")}. ${[aPrev ? `${brl(aPrev)} têm previsão no contrato` : "", aParc ? `${brl(aParc)} são parcelas de compras` : "", aSem ? `${brl(aSem)} sem previsão no contrato cadastrado (serviços e compras à parte, que precisam de orçamento e aprovação próprios)` : ""].filter(Boolean).join("; ")}.${exc ? ` O contrato prevê ${exc.excecao}: confira se as cobranças estão entre elas.` : ""}`]);
   }
   if (atrasos.length) {
     const fs = new Set(atrasos.map((x) => x.mesBal)), saldo = [...fs].some((mb) => (S.todos.find((b) => b.mes === mb)?.notas || []).some((n) => /falta de saldo/i.test(n.texto)));
-    ach.push(["info", "Pagamentos após o vencimento", `${atrasos.length} pagamento(s) mais de 5 dias depois do dia ${c.diaVenc} (maior atraso: ${Math.max(...atrasos.map((x) => x.at))} dias)${c.multa ? `; o contrato prevê ${c.multa} por atraso` : ""}.${saldo ? " Nos mesmos balancetes, a administradora informa pagamentos atrasados por falta de saldo do condomínio." : ""}`]);
+    const Vm = vereditoExcedente(c, { linhas, avs }), multaMax = Vm ? Vm.multas : 0;
+    ach.push(["info", "Pagamentos após o vencimento", `${multaMax && c.multa ? `Nos meses pagos a mais, multa e juros por atraso explicariam no máximo ${brl(multaMax)}: a única parte do excedente que teria base no contrato. ` : ""}${atrasos.length} pagamento(s) mais de 5 dias depois do dia ${c.diaVenc} (maior atraso: ${Math.max(...atrasos.map((x) => x.at))} dias)${c.multa ? `; o contrato prevê ${c.multa} por atraso` : ""}.${saldo ? " Nos mesmos balancetes, a administradora informa pagamentos atrasados por falta de saldo do condomínio." : ""}`]);
   }
   return { c, an, linhas, ach, seq, modo, modos, melhor, comp: { base, acimaExpl, semExpl, aPrev, aSem, aParc, totP, totA }, mens, avs };
 }
@@ -1782,7 +1787,7 @@ function fichaSecur(c) {
       <div class="trilha" role="list">${ms.map((m, i) => `<button type="button" role="listitem" class="tri ${ST_CT[sts[i]][1]} ${m === sel ? "sel" : ""}" data-ct-mes="${m.mes}" aria-pressed="${m === sel}"><span class="tri-bar"><i style="height:${m.princ ? Math.round(Math.min(1, (m.gross || m.princ.v) / Math.max(...ms.map((x) => x.gross || (x.princ ? x.princ.v : 0)), 1)) * 100) : 4}%;background:${COR_CT[sts[i]]}"></i></span><span class="tri-mes">${rotCurto(m.mes)}</span><span class="tri-dif ${sts[i] === "sem" ? "neg" : ""}">${m.st === "ok" ? "confere" : m.st === "explicado" ? "líquido" : m.st === "ausente" ? "sem repasse" : "conferir"}</span></button>`).join("")}</div>
       <div class="trilha-leg legenda">${[["ok", "Desconto confere"], ["explicado", "Lançado líquido (confere pelo cálculo)"], ["sem", "Não confere"], ["ausente", "Sem repasse"]].map(([k2, t2]) => `<span><i class="${k2 === "ausente" ? "branco" : ""}" style="background:${COR_CT[k2]}"></i>${t2}</span>`).join("")}</div>
       ${painel}</section>
-    <section class="diag-ct"><div class="cab-secao"><span class="eyebrow">Conclusões</span><h3>O que os dados mostram</h3></div><ul class="achados">
+    <section class="diag-ct"><div class="cab-secao"><span class="eyebrow">Conclusões</span><h3>O que os dados mostram</h3></div>${vereditoHTML(c)}<ul class="achados">
       <li class="ok"><span class="st-ct ok">Contrato</span><b>Receita garantida.</b> ${esc(`A ${c.forn} paga ao condomínio as taxas condominiais, o fundo de reserva e as cotas de água todo mês, 1 dia útil após o vencimento, mesmo que o condômino não pague. Em troca, fica com ${String(pct).replace(".", ",")}% do valor, R$ ${String(pt.toFixed(2)).replace(".", ",")} por boleto e com as multas, juros e encargos de quem atrasa. No período: ${brl(F)} de remuneração e ${brl(T)} de tarifas, ${G ? pct2((F + T) / G) : "—"} do bruto.`)}</li>
       ${alts.map((a) => `<li class="${a.sev === "alta" ? "sem" : a.sev === "media" ? "sem" : "agu"}"><span class="st-ct ${a.sev === "baixa" ? "agu" : "sem"}">${a.sev === "baixa" ? "Para saber" : "Precisa de resposta"}</span><b>${esc(a.titulo.replace(`Contrato de ${c.forn}: `, "").replace(/^./, (x) => x.toUpperCase()))}.</b> ${esc(a.detalhe)}</li>`).join("")}
     </ul></section>
@@ -1912,6 +1917,7 @@ function cruzamentos(c) {
           ...(semE > 0 ? [{ tema: "Valores", q: `A ${jur.forn} vai devolver ou descontar nas próximas notas os ${brl(semE)} pagos pelo condomínio acima da mensalidade, já que a cobrança dos inadimplentes é paga pela ${sec.forn}?`, porque: `De ${rotCurto(acima[0].mes)} a ${rotCurto(acima.at(-1).mes)} as notas ficaram entre ${brl(Math.min(...acima.map((l) => l.pc)))} e ${brl(Math.max(...acima.map((l) => l.pc)))}, contra ${brl(jur.valor)} do contrato, sem aditivo nem explicação nos balancetes.`, doc: `Composição de cada nota da ${jur.forn} desde ${rotCurto(acima[0].mes)} e proposta de devolução ou compensação.` }] : []),
           { tema: "Contratos", q: `Quanto a ${sec.forn} pagou à ${jur.forn} pela cobrança dos inadimplentes do condomínio desde ${rotuloMes(dIni(sec).slice(0, 7))}?`, porque: `Se o escritório recebe da ${sec.forn} e também do condomínio pela mesma cobrança, o condomínio está pagando em duplicidade.`, doc: `Contrato entre a ${sec.forn} e a ${jur.forn} e as notas fiscais emitidas para a ${sec.forn}.` },
           { tema: "Contratos", q: `Como o condomínio fica protegido se o mesmo escritório trabalha para a ${sec.forn}, dona da dívida dos inadimplentes, e para o condomínio?`, porque: `Há conflito de interesse: a ${jur.forn} assessora o condomínio e cobra em nome da ${sec.forn}, cujo contrato foi assinado pela empresa do síndico.`, doc: `Declaração da ${jur.forn} sobre os contratos que mantém com a ${sec.forn} e com a Duos Síndicos 360.` },
+          { tema: "Contratos", q: `A ${jur.forn}, que pelo contrato fiscaliza os contratos do condomínio com fornecedores, analisou o contrato com a ${sec.forn}, da qual também é contratada?`, porque: `O contrato da ${jur.forn} inclui a fiscalização dos contratos com fornecedores (cláusula 4ª, item i); analisar um contrato de quem também a remunera é conflito de interesse.`, doc: `Parecer jurídico sobre o contrato com a ${sec.forn}, se houver.` },
           { tema: "Contratos", q: `O contrato com a ${jur.forn} deve ser revisto em assembleia, tirando a "recuperação de inadimplência" e ajustando o valor, ou encerrado?`, porque: `Essa parte do contrato deixou de ter função com a securitização. Encerrar antes do prazo obriga a pagar honorários sobre os processos em andamento (15%) e encerrados com sentença ou acordo (20%).`, doc: `Lista dos processos em andamento patrocinados pela ${jur.forn} para o condomínio.` },
         ] });
     } else
@@ -1971,17 +1977,38 @@ function pautaAssembleia(c) {
   const cruz = cruzamentos(c);
   for (const x of cruz) for (const p of x.perguntas) if (!P.some((y) => y.q === p.q)) P.push(p);
   // a pergunta do cruzamento sobre os honorários de êxito já cobre a do valor acima do contrato
+  if (P.some((p) => /vai devolver ou descontar/.test(p.q))) { const i = P.findIndex((p) => /recebe, em média/.test(p.q)); if (i >= 0) { const g = P.splice(i, 1)[0]; const e = P.find((p) => /vai devolver ou descontar/.test(p.q)); e.q = `${g.q} ${e.q}`; e.doc = `${g.doc} ${e.doc}`; } }
   if (P.some((p) => /são honorários de êxito/.test(p.q))) { const i = P.findIndex((p) => /recebe, em média/.test(p.q)); if (i >= 0) { const g = P.splice(i, 1)[0]; const e = P.find((p) => /são honorários de êxito/.test(p.q)); e.porque = `${g.porque} ${e.porque}`; e.doc = g.doc; } }
-  const ordem = ["Aprovação", "Contratos", "Valores", "Receitas", "Prestação de contas"];
-  P.sort((a, b) => ordem.indexOf(a.tema) - ordem.indexOf(b.tema));
+  const prio = (p) => /devolver ou descontar/.test(p.q) ? 0 : /pagou à .* pela cobrança/.test(p.q) ? 1 : /conflito|fica protegido/.test(p.q + p.porque) ? 2 : /revisto em assembleia/.test(p.q) ? 3 : p.tema === "Aprovação" ? 4 : p.tema === "Valores" ? 5 : p.tema === "Contratos" ? 6 : p.tema === "Receitas" ? 7 : 8;
+  P.sort((a, b) => prio(a) - prio(b));
   S.ctPauta = P; S.ctPerguntas = P.map((p) => p.q);
   return { cruz, P };
+}
+function vereditoHTML(c) {
+  const x = cruzamentos(c).find((y) => y.veredito); if (!x) return "";
+  const V = x.veredito, j = x.jur || c, secN = ((S.contratos || []).find((y) => y.securitizacao) || {}).forn || "securitizadora";
+  return `<div class="veredito"><h4>Os valores pagos a mais à ${esc(j.forn)} são devidos?</h4>
+    <p class="vered-resp"><b>Pelos contratos e pelos balancetes, não.</b> Devido é a mensalidade de ${brl(j.valor)} e os reembolsos com comprovante. O excedente não tem cláusula que o sustente e, como a ${esc(j.forn)} também é paga pela ${esc(secN)} pela cobrança dos inadimplentes, deve ser tratado como indevido até prova em contrário.</p>
+    <table class="vered-tab"><tbody>
+      <tr><td>Pago acima da mensalidade (${V.de ? rotCurto(V.de) : "—"} a ${V.ate ? rotCurto(V.ate) : "—"}), lendo o contrato ao pé da letra</td><td class="n neg">${brl(V.literal)}</td></tr>
+      <tr><td>Mesmo na leitura mais favorável ao escritório (mensalidade = 2 salários mínimos do ano)</td><td class="n neg">${brl(V.favoravel)}</td></tr>
+      ${V.assIsentas ? `<tr><td>Assembleias cobradas que podem estar entre as 3 isentas pelo contrato</td><td class="n neg">${brl(V.assIsentas)}</td></tr>` : ""}
+      <tr><td>Única parte com explicação possível: multa e juros por atraso (2% + 1% ao mês)</td><td class="n">até ${brl(V.multas)}</td></tr>
+      ${V.cart ? `<tr><td>Cartório e registro de atas: devidos com comprovante (reembolso previsto)</td><td class="n">${brl(V.cart)}</td></tr>` : ""}
+      <tr class="total"><td>Possivelmente indevido</td><td class="n neg">${brl(V.minInd)} a ${brl(V.maxInd)}</td></tr>
+    </tbody></table>
+    <h4>Decisão sugerida</h4>
+    <ol class="vered-passos"><li>Contestar por escrito já: pelo contrato do escritório, a prestação de contas sem resposta em 30 dias é dada como aceita.</li>
+      <li>Pedir em até 15 dias a composição de cada nota, os relatórios mensais de processos (que o contrato obriga) e o contrato do escritório com a ${esc(secN)}.</li>
+      <li>Até a resposta, pagar só a mensalidade de ${brl(j.valor)}.</li>
+      <li>Sem comprovação: pedir a devolução ou o desconto nas próximas notas e levar à assembleia a revisão ou o encerramento do contrato (antes, pedir a lista de processos em andamento).</li></ol>
+    <p class="mini">Leitura dos documentos para apoiar a decisão do conselho; não substitui a orientação de um advogado.</p></div>`;
 }
 function blocoAssembleia(c) {
   const { cruz, P } = pautaAssembleia(c);
   return `${cruz.length ? `<section class="cruz-ct"><div class="cab-secao"><span class="eyebrow">Cruzamento com outros contratos</span><h3>O que os contratos mostram juntos</h3></div>
       <ul class="achados">${cruz.map((x) => `<li class="sem"><span class="st-ct sem">Precisa de resposta</span><b>${esc(x.titulo)}.</b> ${esc(x.txt)}${x.outro ? ` <button type="button" class="link-btn" data-ct-ficha="${x.outro.id}">Ver ${esc(x.outro.forn)}</button>` : ""}</li>`).join("")}</ul>
-      ${cruz.filter((x) => x.veredito).map((x) => { const V = x.veredito, j = x.jur || c; return `<div class="veredito"><h4>Os valores pagos a mais são devidos?</h4>
+      ${"" && cruz.filter((x) => x.veredito).map((x) => { const V = x.veredito, j = x.jur || c; return `<div class="veredito"><h4>Os valores pagos a mais são devidos?</h4>
         <p class="vered-resp"><b>Pelos contratos e pelos balancetes, não.</b> Até a ${esc(j.forn)} comprovar a composição de cada nota e a cláusula que autoriza cada valor, o excedente deve ser tratado como indevido.</p>
         <table class="vered-tab"><tbody>
           <tr><td>Pago acima da mensalidade de ${brl(j.valor)} (${V.de ? rotCurto(V.de) : "—"} a ${V.ate ? rotCurto(V.ate) : "—"}), lendo o contrato ao pé da letra</td><td class="n neg">${brl(V.literal)}</td></tr>
@@ -2122,6 +2149,7 @@ function fichaContrato(c0) {
 
     <section class="diag-ct">
       <div class="cab-secao"><span class="eyebrow">Conclusões</span><h3>O que os dados mostram no período</h3></div>
+      ${vereditoHTML(c)}
       ${E.ach.length ? `<ul class="achados">${E.ach.map(([nv, tit, txt]) => `<li class="${NIVEL[nv][1]}"><span class="st-ct ${NIVEL[nv][1]}">${NIVEL[nv][0]}</span><b>${esc(tit)}.</b> ${esc(txt)}</li>`).join("")}</ul>` : '<p class="muted">Pagamentos conferem com o contrato.</p>'}
       ${alertasCt.length ? `<div class="ct-alertas"><h4>Andamento no Acompanhamento</h4><ul>${alertasCt.map((a) => { const r = S.acomp[a.chave] || {}; return `<li><span class="sit ${a.sit}">${SITUACOES[a.sit] || "Pendente"}</span> ${esc(a.titulo.replace(`Contrato de ${c.forn}: `, ""))}${r.resposta ? `<div class="mini">Resposta: ${esc(r.resposta)}</div>` : ""}</li>`; }).join("")}</ul><p class="mini">Esses pontos estão na aba Acompanhamento, com prazo, responsável e histórico.</p></div>` : ""}
     </section>

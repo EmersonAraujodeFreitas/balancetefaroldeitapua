@@ -370,7 +370,8 @@ export function lerContrato(textoBruto, forns = []) {
     if (/15%[^.]{0,80}11/.test(n) || /quinze por cento/.test(n)) info("Cobrança dos inadimplentes", "multa, juros e encargos ficam com a securitizadora; cobrança administrativa +15% (11º ao 30º dia) e +20% a partir do 31º dia ou na via judicial, pagos pelo condômino devedor");
     info("Repasse", "1 dia útil após o vencimento do boleto, mesmo que o condômino não pague; outras cotas no mesmo boleto vão no 5º dia útil do mês seguinte; prestação de contas em até 15 dias");
     info("O que não entra", "taxas extraordinárias, vouchers de restaurante e taxas de manutenção das unidades (precisam de aditivo)");
-    if (sec) info("Quem assina", `${sec[1].replace(/\s+/g, " ").trim()} assina como securitizada; o condomínio aparece só como interveniente/anuente, representado pelo síndico. A cláusula 11ª pede assembleia para aprovar a securitização.`);
+    const tc = (x) => x.replace(/\s+/g, " ").trim().toLowerCase().replace(/(^|\s)(\S)/g, (m0, a2, b2) => a2 + b2.toUpperCase()).replace(/\bLtda\b/, "Ltda").replace(/\bSindicos\b/, "Síndicos");
+    if (sec) info("Quem assina", `${tc(sec[1])} assina como securitizada; o condomínio aparece só como interveniente/anuente, representado pelo síndico. A cláusula 11ª pede assembleia para aprovar a securitização.`);
     info("Rescisão", "aviso de 60 dias; na saída, o condomínio devolve em 10 dias os valores antecipados e ainda não recuperados (ou desconto nos repasses, ou confissão de dívida em até 6 parcelas)");
   } else
   // contrato de receita: o condomínio cede ou aluga um espaço e recebe (loja, mercadinho, antena, publicidade)
