@@ -2361,10 +2361,13 @@ function render() {
     for (const id of ["#kpis", "#grafMensal", "#leitura", "#miniCats", "#tabMensal"]) $(id).innerHTML = "";
     $("#kpis").innerHTML = `<div class="vazio card">Nenhum balancete carregado. Importe os PDFs na aba <a href="#dados">Importar PDF</a>.</div>`;
   } else {
-    prepararAlertas(A);
+    S.alertasTodos = alertas(S.todos); prepararAlertas(S.alertasTodos);
+    const ctA = alertasContratos(S.alertasTodos); S.alertasTodos.push(...ctA);
+    const de0 = S.meses[0].mes, ate0 = S.meses.at(-1).mes;
+    A.push(...ctA.filter((a) => !a.mes || (a.mes >= de0 && a.mes <= ate0)).map((a) => ({ ...a })));
+    prepararAlertas(S.alertasTodos); prepararAlertas(A);
     const n = A.filter((a) => a.sev === "alta" && ativo(a)).length;
     $("#cntAlertas").textContent = n || ""; $("#cntAlertas").hidden = !n;
-    S.alertasTodos = alertas(S.todos); prepararAlertas(S.alertasTodos);
     S.novidades = novidades();
     if (S.ctRenomear && (!AC.ligado || ehAdmin())) { S.ctRenomear = false; salvarConteudo("contratos").then(() => registrar("Padronizou nomes", "Fornecedores dos contratos")).catch(() => { S.ctRenomear = true; }); }
     painel(); acompanhamento(); renderExecutivo(S.meses, $("#secAnalises")); categorias(); fornecedores(); listaAlertas(); tabParcelas(); notas(); conselho();
@@ -2579,7 +2582,7 @@ function novidades() {
   if (S.todos.length < 2) return null;
   const ult = S.todos.at(-1), ant = S.todos.at(-2);
   const antes = alertas(S.todos.slice(0, -1)).map(chaveAlerta), setA = new Set(antes);
-  const agora = S.alertasTodos;
+  const agora = S.alertasTodos.filter((a) => !a.ct);
   const conhecida = (a) => setA.has(a.chave) || (a.partes || []).some((p) => setA.has(chaveAlerta(p)));
   const novos = agora.filter((a) => !conhecida(a) && a.sev !== "info");
   novos.forEach((a) => (a.novo = true)); S.novosSet = new Set(novos.map((a) => a.chave));
@@ -3471,16 +3474,25 @@ function prepararAta() {
 // ---------------------------------------------------------------- contratos
 // filtro opcional: só os lançamentos cujo histórico contém o texto (ex.: "ASSESSORIA"), para não misturar reembolsos
 const normTxt = (t) => String(t || "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
+// empresas do mesmo grupo que se revezam no faturamento do mesmo contrato
+const grupoForn = (f) => (/^(Logoserv Recursos Humanos|Logo Gerência de Cobranças)$/.test(f || "") ? "Grupo Logo" : f);
+const doContrato = (c, forn) => forn === c.forn || grupoForn(forn) === grupoForn(c.forn);
 // lançamentos da mensalidade: pelo filtro de texto informado ou, sem filtro, pelo histórico que se repete com o valor do contrato
 const ehMensal = (c, d) => c.filtro ? normTxt(d.desc).includes(normTxt(c.filtro).trim()) : c.itemAuto ? d.item === c.itemAuto : true;
-const lancDoContrato = (c, b, dentro = true) => b.despesas.filter((d) => d.forn === c.forn && ehMensal(c, d) === dentro);
+const lancDoContrato = (c, b, dentro = true) => b.despesas.filter((d) => doContrato(c, d.forn) && ehMensal(c, d) === dentro);
+const ehParcela = (d) => /parcela\s*\d+\s*\/\s*\d+/i.test(`${d.det} ${d.desc}`);
+// histórico da mensalidade: o que se repete na maioria dos meses (parcelas de compras não contam), com valor mais perto do contrato
+function itensRecorrentes(forn) {
+  const por = {}, meses = new Set();
+  for (const b of S.todos) for (const d of b.despesas) if (grupoForn(d.forn) === grupoForn(forn)) { meses.add(b.mes); if (ehParcela(d)) continue; const x = (por[d.item] ||= { item: d.item, meses: new Set(), vals: [] }); x.meses.add(b.mes); x.vals.push(d.v); }
+  return Object.values(por).map((x) => { const v = [...x.vals].sort((a, b) => a - b); return { item: x.item, n: x.meses.size, med: v[Math.floor(v.length / 2)] }; }).filter((x) => x.n >= Math.max(2, meses.size * 0.4)).sort((a, b) => b.n - a.n);
+}
 function itemMensal(c) {
   if (c.filtro || !c.valor || c.modalidade === "global" || c.modalidade === "anual") return "";
-  const tot = {}, perto = {};
-  for (const b of S.todos) for (const d of b.despesas) if (d.forn === c.forn) { tot[d.item] = (tot[d.item] || 0) + 1; if (Math.abs(d.v - c.valor) <= c.valor * 0.15) perto[d.item] = (perto[d.item] || 0) + 1; }
-  if (Object.keys(tot).length < 2) return "";
-  const best = Object.entries(perto).sort((a, b) => b[1] - a[1])[0];
-  return best && best[1] >= 2 ? best[0] : "";
+  const todosItens = new Set(); for (const b of S.todos) for (const d of b.despesas) if (doContrato(c, d.forn)) todosItens.add(d.item);
+  if (todosItens.size < 2) return "";
+  const rec = itensRecorrentes(c.forn); if (!rec.length) return "";
+  return [...rec].sort((a, b) => Math.abs(Math.log(a.med / c.valor)) - Math.abs(Math.log(b.med / c.valor)))[0].item;
 }
 const ctEf = (c) => { if (c.itemAuto !== undefined) return c; const it = itemMensal(c); return { ...c, itemAuto: it }; };
 function pagoNoMes(forn, mes, filtro) { const b = S.todos.find((x) => x.mes === mes); return b ? lancDoContrato({ forn, filtro }, b).reduce((s2, d) => s2 + d.v, 0) : 0; }
@@ -3641,18 +3653,23 @@ function citaFornecedor(texto, c, ds) {
 function explicarContrato(c0) {
   const c = ctEf(c0), an = analisarContrato(c0), tolP = (c.tol ?? 2) / 100, ini = ctIniMes(c), ultBal = S.todos.at(-1)?.mes;
   const meses = an.meses.map((m) => m.mes), setM = new Set(meses);
-  const L = S.todos.flatMap((b) => b.despesas.map((d, i) => ({ ...d, id: `${b.mes}#${i}`, mesBal: b.mes, compBal: refIso(d.ref) || b.mes })).filter((d) => d.forn === c.forn))
+  const L = S.todos.flatMap((b) => b.despesas.map((d, i) => ({ ...d, id: `${b.mes}#${i}`, mesBal: b.mes, compBal: refIso(d.ref) || b.mes })).filter((d) => doContrato(c, d.forn)))
     .filter((d) => !ini || d.mesBal >= ini || d.compBal >= ini);
   const mens = L.filter((d) => ehMensal(c, d)), avs = L.filter((d) => !ehMensal(c, d));
-  const porNF = {}; for (const d of L) if (/^\d{3,}$/.test(String(d.nf || "").trim())) (porNF[+d.nf] ||= []).push(d);
+  const porNF = {}; for (const d of L) if (/^\d{3,}(?:\/\d+)?$/.test(String(d.nf || "").trim())) (porNF[String(d.nf).trim()] ||= []).push(d);
+  const faturas = {}; for (const d of L) { const k = String(d.nf || "").split("/")[0].trim(); if (/^\d{3,}$/.test(k)) (faturas[`${d.mesBal}|${k}`] ||= []).push(d); }
   // a mesma NF em parcelas diferentes (Parcela 01/05, 02/05…) não é duplicidade
+  // só é duplicidade a mesma NF com o mesmo valor (uma fatura com vários itens ou parcelas diferentes não é)
   const parc = (d) => (/parcela\s*(\d+)\s*\/\s*\d+/i.exec(`${d.det} ${d.desc}`) || [])[1];
-  for (const k of Object.keys(porNF)) { const g = porNF[k], ps = g.map(parc); if (ps.every(Boolean) && new Set(ps).size === g.length) delete porNF[k]; }
+  for (const k of Object.keys(porNF)) {
+    const g = porNF[k].filter((d) => porNF[k].some((y) => y !== d && Math.abs(y.v - d.v) < 0.02 && !(parc(d) && parc(y) && parc(d) !== parc(y))));
+    if (g.length > 1) porNF[k] = g; else delete porNF[k];
+  }
   const nfRep = Object.values(porNF).filter((v) => v.length > 1);
   // hipótese: a competência certa é a ordem de emissão das notas (uma nota por mês)
   const comDev = an.meses.filter((m) => m.dev > 0).map((m) => m.mes);
   const problemas = (atr) => { const k = {}; for (const [, m] of atr) k[m] = (k[m] || 0) + 1; return comDev.filter((m) => m !== ultBal && !k[m]).length + Object.values(k).reduce((s2, n) => s2 + Math.max(0, n - 1), 0); };
-  const unicas = mens.filter((d) => /^\d+$/.test(String(d.nf || "").trim()) && porNF[+d.nf]?.[0] === d).sort((a, b) => +a.nf - +b.nf);
+  const unicas = mens.filter((d) => /^\d+$/.test(String(d.nf || "").trim()) && (!porNF[String(d.nf).trim()] || porNF[String(d.nf).trim()][0] === d)).sort((a, b) => +a.nf - +b.nf);
   let seq = null;
   if (!ehCumulativo(c) && unicas.length >= 3 && comDev.length && unicas.length <= comDev.length + 1) {
     const atr = unicas.map((d, i) => [d, mesMais(comDev[0], i)]), resto = mens.filter((d) => !unicas.includes(d)).map((d) => [d, d.compBal]);
@@ -3667,7 +3684,7 @@ function explicarContrato(c0) {
   const linhas = an.meses.map((m) => {
     const P = mens.filter((d) => compDe(d) === m.mes), A = avs.filter((d) => (setM.has(d.compBal) ? d.compBal : d.mesBal) === m.mes);
     const pc = r2(P.reduce((s2, d) => s2 + d.v, 0)), pa = r2(A.reduce((s2, d) => s2 + d.v, 0)), dif = r2(pc - m.dev), tolV = Math.max(1, m.dev * tolP);
-    const ex = []; let expl = 0, aPrev = 0, aSem = 0;
+    const ex = []; let expl = 0, aPrev = 0, aSem = 0, aParc = 0;
     const add = (tipo, txt, v = 0) => { if (!ex.some((x) => x.txt === txt)) ex.push({ tipo, txt }); expl = r2(expl + v); };
     // valor proporcional pelo período da nota
     for (const d of P) {
@@ -3698,10 +3715,17 @@ function explicarContrato(c0) {
       else add("info", `Paga em ${d.baixa.slice(0, 5)}, ${at} dias após o vencimento (${dataBR(venc).slice(0, 5)}).`);
     }
     // mesma nota paga mais de uma vez
-    for (const d of [...P, ...A]) { const g = porNF[+d.nf]; if (g && g.length > 1) add("alerta", `A NF ${d.nf} também foi paga em ${g.filter((y) => y !== d).map((y) => `${y.baixa} (${brl(y.v)}, balancete ${rotCurto(y.mesBal)})`).join(", ")}: possível pagamento em duplicidade.`); }
+    for (const d of [...P, ...A]) { const g = porNF[String(d.nf || "").trim()]; if (g && g.includes(d) && g.length > 1) add("alerta", `A NF ${d.nf} também foi paga em ${g.filter((y) => y !== d).map((y) => `${y.baixa} (${brl(y.v)}, balancete ${rotCurto(y.mesBal)})`).join(", ")}: possível pagamento em duplicidade.`); }
     if (!P.length && m.dev > 0) add(m.mes === ultBal ? "info" : "alerta", m.mes === ultBal ? "Competência do último balancete: costuma ser paga no balancete seguinte." : "Nenhum pagamento da mensalidade identificado para esta competência.");
     // pagamentos fora da mensalidade
-    for (const d of A) {
+    for (const k of new Set([...P, ...A].map((d) => `${d.mesBal}|${String(d.nf || "").split("/")[0].trim()}`))) { const f = faturas[k]; if (f && f.length > 2) add("info", `A nota ${k.split("|")[1]} reúne ${f.length} lançamentos deste fornecedor (${brl(f.reduce((s2, d) => s2 + d.v, 0))}): ${[...new Set(f.map((d) => (d.item || "").toLowerCase()))].join(", ")}. É uma fatura com vários itens, não pagamento repetido.`); }
+    for (const d of A.filter(ehParcela)) {
+      const pm = /parcela\s*(\d+)\s*\/\s*(\d+)\s*(?:-\s*([^.]+))?/i.exec(`${d.det} ${d.desc}`), k = +pm[1], n = +pm[2], prod = (pm[3] || d.item || "").trim();
+      const serie = L.filter((y) => y.item === d.item && ehParcela(y) && Math.abs(y.v - d.v) <= Math.max(0.05, d.v * 0.01) && new RegExp(`/\\s*0*${n}\\b`).test(`${y.det} ${y.desc}`));
+      add("ok", `Parcela ${k} de ${n} de compra parcelada (${prod.toLowerCase()}): total previsto ${brl(d.v * n)}; ${serie.length} de ${n} parcela(s) aparecem nos balancetes.`);
+      aParc = r2(aParc + d.v);
+    }
+    for (const d of A.filter((y) => !ehParcela(y))) {
       const pv = previsaoAvulso(c, d), nome = `${(d.item || "pagamento").toLowerCase()}${d.det ? ` (${d.det.replace(/\.$/, "")})` : ""}`;
       if (pv && pv.prev) { const okv = Math.abs(d.v - pv.prev) <= 1; aPrev = r2(aPrev + d.v); add(okv ? "ok" : "info", `Avulso de ${brl(d.v)}: ${nome}. Contrato: ${pv.txt}${okv ? "" : `; pago ${d.v > pv.prev ? "a mais" : "a menos"} ${brl(Math.abs(d.v - pv.prev))}`}.${pv.excecao ? ` O contrato prevê ${pv.excecao}: confira se esta cobrança está entre elas.` : ""}`); }
       else if (pv && pv.txt) { aPrev = r2(aPrev + d.v); add("info", `Avulso de ${brl(d.v)}: ${nome}. ${pv.txt}`); }
@@ -3713,15 +3737,15 @@ function explicarContrato(c0) {
     // o que os balancetes dizem: notas da administradora, alertas e respostas
     const ds = [...P, ...A], ids = new Set(ds.map((d) => d.id));
     for (const mb of new Set(ds.map((d) => d.mesBal))) for (const n of S.todos.find((x) => x.mes === mb)?.notas || []) if (citaFornecedor(n.texto, c, ds.filter((d) => d.mesBal === mb))) add("fonte", `Nota da administradora no balancete de ${rotCurto(mb)}: ${n.texto.replace(/^\d+\)\s*/, "")}`);
-    for (const a of S.alertasTodos || []) if ((a.ids || []).some((i) => ids.has(i))) { const r = S.acomp[a.chave] || {}; add("fonte", `Alerta: ${a.titulo}${r.resposta ? ` — resposta registrada${r.respondidoEm ? ` em ${dataBR(r.respondidoEm)}` : ""}: “${r.resposta.trim()}”` : ` — ${SITUACOES[a.sit] || "Pendente"}, sem resposta registrada`}`); }
+    for (const a of S.alertasTodos || []) if (!a.ct && (a.ids || []).some((i) => ids.has(i)) && !ex.some((x) => x.txt.includes(a.titulo))) { const r = S.acomp[a.chave] || {}; add("fonte", `Alerta: ${a.titulo}${r.resposta ? ` — resposta registrada${r.respondidoEm ? ` em ${dataBR(r.respondidoEm)}` : ""}: “${r.resposta.trim()}”` : ` — ${SITUACOES[a.sit] || "Pendente"}, sem resposta registrada`}`); }
     const st = !P.length && m.dev > 0 ? (m.mes === ultBal ? "aguarda" : "ausente") : Math.abs(dif) <= tolV ? "ok" : Math.abs(resto) <= tolV ? "explicado" : expl ? "parcial" : "sem";
-    return { ...m, P, A, pc, pa, dif, expl, resto: Math.abs(resto) <= tolV ? 0 : resto, ex, st, aPrev, aSem };
+    return { ...m, P, A, pc, pa, dif, expl, resto: Math.abs(resto) <= tolV ? 0 : resto, ex, st, aPrev, aSem, aParc };
   });
   // ---- conclusões do período
   const ach = [], soma = (k, f = () => true) => r2(linhas.filter(f).reduce((s2, l) => s2 + l[k], 0));
   const totP = soma("pc"), totA = soma("pa"), semExpl = r2(linhas.reduce((s2, l) => s2 + Math.max(0, l.resto), 0));
   const acimaExpl = r2(linhas.reduce((s2, l) => s2 + (l.dif > 0 ? Math.max(0, Math.min(l.dif, l.expl)) : 0), 0));
-  const base = r2(totP - linhas.reduce((s2, l) => s2 + Math.max(0, l.dif), 0)), aPrev = soma("aPrev"), aSem = soma("aSem");
+  const base = r2(totP - linhas.reduce((s2, l) => s2 + Math.max(0, l.dif), 0)), aPrev = soma("aPrev"), aSem = soma("aSem"), aParc = soma("aParc");
   const prop = linhas.flatMap((l) => l.ex).find((x) => x.tipo === "ok" && x.txt.startsWith("Mês proporcional"));
   if (prop) ach.push(["confirmado", "Primeiro mês proporcional", prop.txt]);
   if (seq) {
@@ -3744,22 +3768,45 @@ function explicarContrato(c0) {
     else if (!(c.info || []).length && !(c.adicionais || []).length && c.origem === "") txt += " Importe o PDF do contrato para cruzar com as cláusulas.";
     ach.push(["sem", "Valor acima do contrato", txt]);
   }
+  if (!c.filtro && !ehCumulativo(c) && c.valor) {
+    const rec = itensRecorrentes(c.forn), perto = L.filter((d) => !ehParcela(d) && Math.abs(d.v - c.valor) <= c.valor * 0.15).length >= 2;
+    if (rec.length && !perto) ach.unshift(["sem", "Valor cadastrado não confere com os pagamentos", `Nenhum pagamento que se repete todo mês a ${c.forn} fica perto de ${brl(c.valor)}. Os recorrentes são: ${rec.slice(0, 4).map((x) => `${x.item.toLowerCase()} (cerca de ${brl(x.med)} em ${x.n} meses)`).join("; ")}. A comparação usa “${(c.itemAuto || "").toLowerCase()}”, o mais próximo; confira o valor do contrato ou informe no cadastro qual histórico é a mensalidade.`]);
+  }
   const aus = linhas.filter((l) => l.st === "ausente");
   if (aus.length) ach.push(["sem", "Competências sem pagamento", `Nenhuma mensalidade identificada para ${aus.map((l) => rotCurto(l.mes)).join(", ")}${seq && modo === "bal" ? ". Pela ordem das notas, não há falta (escolha “Pela ordem das notas” acima da tabela)" : ""}.`]);
   if (nfRep.length) ach.push(["sem", "Mesma nota paga mais de uma vez", nfRep.map((g) => `NF ${g[0].nf}: ${g.map((d) => `${d.baixa} (${brl(d.v)})`).join(" e ")}`).join("; ") + ". Peça a nota fiscal de cada pagamento ou o comprovante de devolução."]);
   if (avs.length) {
-    const grupos = {}; for (const d of avs) { const pv = previsaoAvulso(c, d), k = pv ? pv.nome : (d.item || "outros").toLowerCase(); (grupos[k] ||= []).push(d); }
-    const exc = avs.map((d) => previsaoAvulso(c, d)).find((p) => p && p.excecao);
-    ach.push([aSem > 0 ? "sem" : "provavel", "Pagamentos fora da mensalidade", `${brl(totA)} em ${avs.length} pagamento(s): ${Object.entries(grupos).map(([k, v]) => `${k} ${brl(v.reduce((s2, d) => s2 + d.v, 0))} (${v.length})`).join("; ")}. ${aPrev ? `${brl(aPrev)} têm previsão no contrato` : ""}${aPrev && aSem ? "; " : ""}${aSem ? `${brl(aSem)} sem previsão nos dados cadastrados` : ""}.${exc ? ` O contrato prevê ${exc.excecao}: confira se as cobranças estão entre elas.` : ""}`]);
+    const grupos = {}; for (const d of avs) { const pv = ehParcela(d) ? null : previsaoAvulso(c, d), k = ehParcela(d) ? "compras parceladas" : pv ? pv.nome : (d.item || "outros").toLowerCase(); (grupos[k] ||= []).push(d); }
+    const exc = avs.filter((d) => !ehParcela(d)).map((d) => previsaoAvulso(c, d)).find((p) => p && p.excecao);
+    ach.push([aSem > 0 ? "sem" : "provavel", "Pagamentos fora da mensalidade", `${brl(totA)} em ${avs.length} pagamento(s): ${Object.entries(grupos).map(([k, v]) => `${k} ${brl(v.reduce((s2, d) => s2 + d.v, 0))} (${v.length})`).join("; ")}. ${[aPrev ? `${brl(aPrev)} têm previsão no contrato` : "", aParc ? `${brl(aParc)} são parcelas de compras` : "", aSem ? `${brl(aSem)} sem previsão nos dados cadastrados` : ""].filter(Boolean).join("; ")}.${exc ? ` O contrato prevê ${exc.excecao}: confira se as cobranças estão entre elas.` : ""}`]);
   }
   if (atrasos.length) {
     const fs = new Set(atrasos.map((x) => x.mesBal)), saldo = [...fs].some((mb) => (S.todos.find((b) => b.mes === mb)?.notas || []).some((n) => /falta de saldo/i.test(n.texto)));
     ach.push(["info", "Pagamentos após o vencimento", `${atrasos.length} pagamento(s) mais de 5 dias depois do dia ${c.diaVenc} (maior atraso: ${Math.max(...atrasos.map((x) => x.at))} dias)${c.multa ? `; o contrato prevê ${c.multa} por atraso` : ""}.${saldo ? " Nos mesmos balancetes, a administradora informa pagamentos atrasados por falta de saldo do condomínio." : ""}`]);
   }
-  return { c, an, linhas, ach, seq, modo, comp: { base, acimaExpl, semExpl, aPrev, aSem, totP, totA }, mens, avs };
+  return { c, an, linhas, ach, seq, modo, comp: { base, acimaExpl, semExpl, aPrev, aSem, aParc, totP, totA }, mens, avs };
 }
 const ST_CT = { ok: ["Conforme", "ok"], explicado: ["Explicado", "expl"], parcial: ["Explicado em parte", "parc"], sem: ["Sem explicação", "sem"], ausente: ["Sem pagamento", "aus"], aguarda: ["Aguardando", "agu"], nada: ["—", "agu"], pago: ["Pago", "ok"], dif: ["Diferença", "sem"] };
 const NIVEL = { confirmado: ["Confirmado pelos dados", "ok"], provavel: ["Provável", "expl"], sem: ["Sem explicação", "sem"], info: ["Para saber", "agu"] };
+// conclusões de cada contrato viram alertas: entram em Alertas, Acompanhamento, Resumo, WhatsApp, parecer e ata
+function alertasContratos(existentes) {
+  const out = [];
+  for (const c of S.contratos || []) {
+    let E; try { E = explicarContrato(c); } catch { continue; }
+    const ids = (f) => E.linhas.filter(f).flatMap((l) => [...l.P, ...l.A].map((d) => d.id));
+    const ultMes = (f) => (E.linhas.filter(f).at(-1) || E.linhas.at(-1) || {}).mes || null;
+    const add = (sev, nome, detalhe, pergunta, idsA, mes) => out.push({ sev, tipo: "Contrato", titulo: `Contrato de ${c.forn}: ${nome}`, detalhe, pergunta, ids: idsA, mes, forn: c.forn, ct: c.id });
+    for (const [nv, tit, txt] of E.ach) {
+      if (tit === "Valor acima do contrato") add("alta", "mensalidade paga acima do contrato", txt, (S.ctPerguntasDe?.(E) || [])[0] || `Qual o documento que autoriza pagar ${brl(E.comp.semExpl)} acima da mensalidade de ${brl(c.valor)} a ${c.forn}?`, ids((l) => l.resto > 0), ultMes((l) => l.resto > 0));
+      else if (tit === "Competências sem pagamento") add("media", "competências sem pagamento", txt, `As competências ${E.linhas.filter((l) => l.st === "ausente").map((l) => rotCurto(l.mes)).join(", ")} de ${c.forn} estão quitadas? Em qual nota?`, [], ultMes((l) => l.st === "ausente"));
+      else if (tit === "Mesma nota paga mais de uma vez") { const idsD = ids((l) => l.ex.some((x) => /duplicidade/.test(x.txt))); if (!existentes.some((a) => (a.ids || []).some((i) => idsD.includes(i)) && /duplicidade|Documento fiscal/i.test(a.tipo))) add("alta", "mesma nota paga mais de uma vez", txt, `Apresentar a nota fiscal de cada pagamento a ${c.forn} ou o comprovante de devolução do valor pago em duplicidade.`, idsD, ultMes(() => true)); }
+      else if (tit === "Pagamentos fora da mensalidade" && (E.comp.aSem > 0 || /exceto|salvo/.test(txt))) add(E.comp.aSem > 0 ? "media" : "baixa", "pagamentos fora da mensalidade", txt, `Quais documentos autorizam os pagamentos a ${c.forn} fora da mensalidade${E.comp.aSem ? ` (${brl(E.comp.aSem)} sem previsão no contrato)` : ""}?`, ids((l) => l.A.length > 0), ultMes((l) => l.A.length > 0));
+      else if (tit === "Competências informadas fora de ordem") add("baixa", "competência informada fora de ordem nos balancetes", txt, `Pedir à administradora corrigir a competência informada das notas de ${c.forn}.`, [], ultMes(() => true));
+      else if (tit === "Valor cadastrado não confere com os pagamentos") add("media", "valor cadastrado não confere com os pagamentos", txt, `Qual o valor mensal contratado com ${c.forn} e qual lançamento do balancete corresponde a ele?`, [], ultMes(() => true));
+    }
+  }
+  return out;
+}
 function fichaContrato(c0) {
   const E = explicarContrato(c0), c = E.c, an = E.an, fim = an.fim, linhas = E.linhas, cp = E.comp;
   const avisoData = fim && c.avisoDias ? somaDias(fim, -c.avisoDias) : "";
@@ -3789,7 +3836,7 @@ function fichaContrato(c0) {
     g += `<text x="${cx}" y="${H - 9}" text-anchor="middle" class="eixo-x">${rotCurto(l.mes)}</text>`;
   });
   // barra de composição do que foi pago
-  const partes = [["Mensalidade dentro do contrato", cp.base, "#2a9d8f"], ["Acima, explicado", cp.acimaExpl, "#5b9bd5"], ["Acima, sem explicação", cp.semExpl, "#d9663a"], ["Avulsos previstos", cp.aPrev, "#8e7cc3"], ["Avulsos sem previsão", cp.aSem, "#c2185b"]].filter((p) => p[1] > 0.009);
+  const partes = [["Mensalidade dentro do contrato", cp.base, "#2a9d8f"], ["Acima, explicado", cp.acimaExpl, "#5b9bd5"], ["Acima, sem explicação", cp.semExpl, "#d9663a"], ["Avulsos previstos", cp.aPrev, "#8e7cc3"], ["Compras parceladas", cp.aParc, "#7aa6c2"], ["Avulsos sem previsão", cp.aSem, "#c2185b"]].filter((p) => p[1] > 0.009);
   const totComp = partes.reduce((s2, p) => s2 + p[1], 0) || 1;
   const tags = (l) => [...l.P.map((d) => `<span class="nf-tag" title="${esc(d.desc)}">${/^\d/.test(d.nf || "") ? "NF " + esc(d.nf) : esc(d.nf || "s/n")} · ${brl(d.v)} · baixa ${esc(String(d.baixa).slice(0, 5))}${E.modo === "nf" && E.seq?.get(d) && E.seq.get(d) !== d.compBal ? ` <i>informada ${rotCurto(d.compBal)}</i>` : ""}</span>`),
     ...l.A.map((d) => `<span class="nf-tag av" title="${esc(d.desc)}">${esc((d.item || "Avulso").toLowerCase())} · ${brl(d.v)} · ${esc(d.nf || "s/n")}</span>`)].join("");
@@ -3811,7 +3858,7 @@ function fichaContrato(c0) {
       ${c.multa ? `<div><dt>Multa por atraso</dt><dd>${esc(c.multa)}</dd></div>` : ""}
       ${c.multaRescisoria ? `<div><dt>Rescisão</dt><dd>${esc(c.multaRescisoria)}</dd></div>` : ""}
       ${(c.info || []).map((x) => `<div><dt>${esc(x.rot)}</dt><dd>${esc(x.txt)}</dd></div>`).join("")}
-      <div><dt>Mensalidade nos balancetes</dt><dd>${c.filtro ? `lançamentos com “${esc(c.filtro)}”` : c.itemAuto ? `histórico “${esc(c.itemAuto)}” (identificado pelo valor); os demais pagamentos ao fornecedor são tratados como avulsos` : "todos os pagamentos ao fornecedor"}</dd></div>
+      <div><dt>Mensalidade nos balancetes</dt><dd>${c.filtro ? `lançamentos com “${esc(c.filtro)}”` : c.itemAuto ? `histórico “${esc(c.itemAuto)}” (identificado pelo valor); os demais pagamentos ao fornecedor são tratados como avulsos` : "todos os pagamentos ao fornecedor"}${grupoForn(c.forn) !== c.forn ? `; inclui as empresas do mesmo grupo (${[...new Set(S.todos.flatMap((b) => b.despesas.map((d) => d.forn)))].filter((f) => grupoForn(f) === grupoForn(c.forn)).join(" e ")})` : ""}</dd></div>
     </dl>
     ${(c.clausulas || []).length ? `<details class="clausulas-ct"><summary>Cláusulas do contrato (${c.clausulas.length})</summary><ol>${c.clausulas.map((x) => `<li>${esc(x)}</li>`).join("")}</ol></details>` : ""}
     ${ehAdmin() ? `<div class="acoes" style="margin-top:8px"><label class="btn sec"><input type="file" data-ct-reler="${c.id}" accept="application/pdf,.pdf,.docx,.txt,image/*" hidden>Atualizar com o PDF do contrato</label><span class="mini" id="ctRelerMsg">Relê o contrato e completa cláusulas, avulsos previstos, honorários e multas, sem mudar valor nem datas.</span></div>` : ""}
@@ -4238,7 +4285,7 @@ async function relerContrato(id, f) {
     if (C.valor && c.valor && Math.abs(C.valor - c.valor) > 0.01) mud.push(`atenção: o PDF diz ${brl(C.valor)}, o cadastro tem ${brl(c.valor)} (não alterado)`);
     novo.origem = f.name; novo.ts = new Date().toISOString(); novo.por = nomeUsuario();
     const antes = S.contratos; S.contratos = S.contratos.map((x) => (x.id === id ? novo : x));
-    try { await salvarConteudo("contratos"); registrar("Atualizou contrato pelo PDF", `${c.forn}: ${mud.join(", ")}`); contratosTab(); toast(mud.length ? `Contrato atualizado: ${mud.join(", ")}.` : "Nada novo no PDF."); }
+    try { await salvarConteudo("contratos"); registrar("Atualizou contrato pelo PDF", `${c.forn}: ${mud.join(", ")}`); render(); toast(mud.length ? `Contrato atualizado: ${mud.join(", ")}.` : "Nada novo no PDF."); }
     catch (err) { S.contratos = antes; msg(mensagemErro(err)); }
   } catch (err) { msg(`Não consegui ler o arquivo: ${err.message || err}`); }
 }
@@ -4320,6 +4367,9 @@ document.addEventListener("submit", async (e) => {
   if (f.id === "fContrato") {
     e.preventDefault(); if (!ehAdmin()) return;
     const dados = lerFormContrato();
+    // fornecedor sempre com o nome padronizado usado nos balancetes
+    const forns = porFornecedor(S.todos).map((x) => x.forn);
+    if (dados.forn && !forns.includes(dados.forn)) { const pad = nomeFornecedor(dados.forn); dados.forn = forns.includes(pad) ? pad : casarFornecedor(dados.forn, forns) || pad; }
     if (!dados.forn || !dados.valor) return ($("#ctMsg").textContent = "Informe o fornecedor e o valor mensal.");
     const id = f.dataset.id || novoId();
     const lido = S.ctRascunho || {};
