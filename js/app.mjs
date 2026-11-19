@@ -1728,7 +1728,7 @@ function securMeses(c) {
 function alertasSecur(c) {
   const ms = securMeses(c), out = [], nome = c.forn, quem = (c.info || []).find((x) => x.rot === "Quem assina");
   const add = (sev, t2, det, perg, mes) => out.push({ sev, tipo: "Contrato", titulo: `Contrato de ${nome}: ${t2}`, detalhe: det, pergunta: perg, ids: [], mes: mes || (ms.at(-1) || {}).mes || null, forn: nome, ct: c.id });
-  if (quem) add("media", "assinado por empresa do síndico como securitizada", quem.txt, `Qual ata de assembleia aprovou a securitização das taxas condominiais com a ${nome} (cláusula 11ª do contrato)? Por que quem assina como securitizada é a ${/DUOS/i.test(quem.txt) ? "Duos Síndicos 360 Ltda" : "empresa indicada"}, e não o condomínio?`);
+  if (quem) add("media", "assinado por empresa do síndico como securitizada", `${quem.txt}${c.aprovadoEm ? ` A ${nome} foi aprovada em assembleia de ${dataBR(c.aprovadoEm)}${c.aprovadoObs ? ` (${c.aprovadoObs})` : ""}.` : ""}`, `${c.aprovadoEm ? `A assembleia de ${dataBR(c.aprovadoEm)} aprovou a Duos Síndicos 360 Ltda como parte do contrato e as condições assinadas?` : `Qual ata de assembleia aprovou a securitização das taxas condominiais com a ${nome} (cláusula 11ª do contrato)?`} Por que quem assina como securitizada é a ${/DUOS/i.test(quem.txt) ? "Duos Síndicos 360 Ltda" : "empresa indicada"}, e não o condomínio?`);
   const dif = ms.filter((m) => m.st === "sem" && m.princ && !m.liquido && m.fee);
   if (dif.length) add("alta", "taxa descontada diferente do contrato", `Nos meses ${dif.map((m) => `${rotCurto(m.mes)} (descontado ${brl(m.fee)}, pelo contrato ${brl(m.feeEsp)})`).join("; ")}, a remuneração descontada não confere com ${String(c.securitizacao?.pct || 2.5).replace(".", ",")}% do valor das taxas.`, `Pedimos a prestação de contas da ${nome} desses meses, com o cálculo da remuneração descontada.`);
   const liq = ms.filter((m) => m.liquido);
@@ -1744,7 +1744,7 @@ function fichaSecur(c) {
   const sel = ms.find((m) => m.mes === S.ctMesSel) || ms.find((m, i) => sts[i] === "sem") || ms.at(-1);
   const soma = (k) => r2(ms.reduce((s2, m) => s2 + (m[k] || 0), 0)), G = soma("gross"), F = soma("fee"), T = soma("tar");
   const alts = alertasSecur(c); S.ctPerguntas = alts.map((a) => a.pergunta);
-  const chips = [["Empresa", `${c.forn}${c.contratado ? ` (${c.contratado})` : ""}`], ["Remuneração", `${String(pct).replace(".", ",")}% + R$ ${String(pt.toFixed(2)).replace(".", ",")} por boleto`], ["Início", c.inicio ? dataBR(c.inicio.length === 10 ? c.inicio : c.inicio + "-01") : "—"], ["Vigência", `${c.prazoMeses ? c.prazoMeses + " meses" : "—"}${c.renovacaoAuto ? ", depois renova por prazo indeterminado" : ""}`], c.avisoDias ? ["Aviso para sair", `${c.avisoDias} dias`] : null].filter(Boolean);
+  const chips = [["Empresa", `${c.forn}${c.contratado ? ` (${c.contratado})` : ""}`], ["Remuneração", `${String(pct).replace(".", ",")}% + R$ ${String(pt.toFixed(2)).replace(".", ",")} por boleto`], ["Início", c.inicio ? dataBR(c.inicio.length === 10 ? c.inicio : c.inicio + "-01") : "—"], ...(c.aprovadoEm ? [["Aprovado em assembleia", dataBR(c.aprovadoEm)]] : []), ["Vigência", `${c.prazoMeses ? c.prazoMeses + " meses" : "—"}${c.renovacaoAuto ? ", depois renova por prazo indeterminado" : ""}`], c.avisoDias ? ["Aviso para sair", `${c.avisoDias} dias`] : null].filter(Boolean);
   const painel = (() => {
     if (!sel) return ""; const i = ms.indexOf(sel), ant = ms[i - 1], prox = ms[i + 1], st = sts[i], reg = regs[i], k = `ctm:${c.id}:${sel.mes}`;
     const ponte = sel.princ ? [
@@ -1930,13 +1930,18 @@ function cruzamentos(c) {
       ] });
   }
   if (sec && (c.id === sec.id || (jur && c.id === jur.id))) {
-    const quem = (sec.info || []).find((x) => x.rot === "Quem assina");
-    const nomes = [jur, sec].filter(Boolean).map((x) => `${x.forn} (${dataBR(x.assinatura || dIni(x))})`).join(" e ");
-    out.push({ outro: null, titulo: "Aprovação em assembleia", txt: `Os contratos ${nomes} foram assinados pelo síndico nas semanas seguintes à assembleia de instalação.${quem ? ` No da ${sec.forn}, quem assina como securitizada é a Duos Síndicos 360 Ltda, empresa do síndico, e o condomínio aparece só como interveniente.` : ""} O próprio contrato da ${sec.forn} pede assembleia para aprovar a securitização.`,
-      perguntas: [
-        { tema: "Aprovação", q: `Em qual assembleia foram aprovadas a contratação da ${jur ? jur.forn : "assessoria jurídica"} e a securitização das taxas com a ${sec.forn}?`, porque: `Os dois contratos comprometem o condomínio por prazo longo (renovação automática) e o da ${sec.forn} exige aprovação em assembleia (cláusula 11ª).`, doc: "Atas das assembleias e lista de presença." },
-        ...(quem ? [{ tema: "Aprovação", q: `Por que quem assina o contrato da ${sec.forn} como securitizada é a Duos Síndicos 360 Ltda, e não o condomínio? A empresa do síndico recebe algum valor dessa operação?`, porque: "O crédito securitizado é do condomínio, mas a parte do contrato é a empresa do síndico; o condomínio só anui.", doc: `Contrato completo com a ${sec.forn}, anexos e eventuais aditivos, e declaração de que a Duos não recebe comissão.` }] : []),
-      ] });
+    const quem = (sec.info || []).find((x) => x.rot === "Quem assina"), ap = (x) => x && x.aprovadoEm ? `aprovado em assembleia de ${dataBR(x.aprovadoEm)}${x.aprovadoObs ? ` (${x.aprovadoObs})` : ""}` : "sem assembleia de aprovação registrada";
+    const nomes = [jur, sec].filter(Boolean).map((x) => `${x.forn}: assinado em ${dataBR(x.assinatura || dIni(x))}, ${ap(x)}`).join("; ");
+    // assembleia que aprovou a securitização e que o escritório cobrou
+    const Ej2 = jur ? (() => { try { return explicarContrato(jur); } catch { return null; } })() : null;
+    const assCobrada = Ej2 && sec.aprovadoEm ? Ej2.avs.find((d) => /assembl/.test(normTxt(`${d.item} ${d.desc}`)) && (d.det || "").includes(dataBR(sec.aprovadoEm))) : null;
+    const perg = [];
+    if (jur && !jur.aprovadoEm) perg.push({ tema: "Aprovação", q: `Em qual assembleia foi aprovada a contratação da ${jur.forn}, com mensalidade de ${brl(jur.valor)}, honorários de êxito e renovação automática?`, porque: `O contrato foi assinado pelo síndico em ${dataBR(jur.assinatura || dIni(jur))} e não há assembleia de aprovação registrada.`, doc: "Ata da assembleia que aprovou a contratação e a proposta apresentada." });
+    if (sec.aprovadoEm) perg.push({ tema: "Aprovação", q: `A assembleia de ${dataBR(sec.aprovadoEm)} aprovou as condições que estão no contrato da ${sec.forn}: a Duos Síndicos 360 Ltda assinando como securitizada, ${String(sec.securitizacao?.pct || 2.5).replace(".", ",")}% + R$ ${String((sec.securitizacao?.porTitulo || 3).toFixed(2)).replace(".", ",")} por boleto, desconto obrigatório de ${sec.securitizacao?.desconto || 10}%, renovação automática e devolução do antecipado na saída?`, porque: `A assembleia aprovou a ${sec.forn} em ${dataBR(sec.aprovadoEm)}; o contrato foi assinado depois, em ${dataBR(sec.assinatura || dIni(sec))}, com a empresa do síndico como parte. É preciso conferir se o que foi assinado é o que foi aprovado.`, doc: `Ata de ${dataBR(sec.aprovadoEm)}, lista de presença e a proposta da ${sec.forn} apresentada na assembleia.` });
+    else perg.push({ tema: "Aprovação", q: `Em qual assembleia foi aprovada a securitização das taxas com a ${sec.forn}?`, porque: `O contrato da ${sec.forn} exige aprovação em assembleia (cláusula 11ª).`, doc: "Ata da assembleia e lista de presença." });
+    if (quem) perg.push({ tema: "Aprovação", q: `Por que quem assina o contrato da ${sec.forn} como securitizada é a Duos Síndicos 360 Ltda, e não o condomínio? A empresa do síndico recebe algum valor dessa operação?`, porque: "O crédito securitizado é do condomínio, mas a parte do contrato é a empresa do síndico; o condomínio só anui.", doc: `Contrato completo com a ${sec.forn}, anexos e eventuais aditivos, e declaração de que a Duos não recebe comissão.` });
+    if (assCobrada && trabalhaPara(jur, sec)) perg.push({ tema: "Contratos", q: `A ${jur.forn} assessorou a assembleia de ${dataBR(sec.aprovadoEm)}, que aprovou a ${sec.forn}? Nessa data ela já era contratada da ${sec.forn}?`, porque: `O escritório cobrou ${brl(assCobrada.v)} do condomínio por essa assembleia e também é contratado da ${sec.forn}. Se já era, orientou a assembleia sobre um contrato do qual se beneficiaria.`, doc: `Data do contrato entre a ${sec.forn} e a ${jur.forn} e a ata de ${dataBR(sec.aprovadoEm)}.` });
+    out.push({ outro: null, titulo: "Aprovação em assembleia", txt: `${nomes}.${sec.aprovadoEm ? ` A ${sec.forn} foi aprovada em assembleia antes da assinatura, mas o contrato assinado tem a Duos Síndicos 360 Ltda, empresa do síndico, como securitizada, e o condomínio só como interveniente: é preciso conferir se a assembleia aprovou essas condições.` : quem ? ` No da ${sec.forn}, quem assina como securitizada é a Duos Síndicos 360 Ltda, empresa do síndico, e o condomínio aparece só como interveniente. O próprio contrato da ${sec.forn} pede assembleia para aprovar a securitização.` : ""}${assCobrada ? ` A assembleia de ${dataBR(sec.aprovadoEm)}, que aprovou a ${sec.forn}, foi cobrada pela ${jur.forn} (${brl(assCobrada.v)}), embora seja uma das primeiras após a instalação, que o contrato do escritório isenta.` : ""}`, perguntas: perg });
   }
   if (sec && c.id === sec.id && sec.securitizacao?.desconto) {
     const prazo = dIni(sec) ? somaDias(dIni(sec), 365) : "", ms = securMeses(sec).filter((m) => m.fee && m.gross && !m.liquido), ult = ms.at(-1);
@@ -2209,6 +2214,8 @@ function formContrato(c) {
       <label>Multa por rescisão<input id="ctMultaR" value="${esc(c?.multaRescisoria || "")}" placeholder="ex.: 1 mensalidade"></label>
       <label>Valores avulsos previstos<input id="ctAdic" value="${esc(ad)}" placeholder="ex.: 50,00 por certidão; 40% SM acompanhamento em assembleia"></label>
       <label>Tolerância (%)<input id="ctTol" inputmode="decimal" value="${String(c?.tol ?? 2).replace(".", ",")}"></label>
+      <label>Aprovado em assembleia de<input id="ctAprov" type="date" value="${c?.aprovadoEm || ""}"></label>
+      <label>Observação sobre a aprovação<input id="ctAprovObs" value="${esc(c?.aprovadoObs || "")}" placeholder="ex.: AGE, informado pelo conselho"></label>
       <label>Também é contratada por (outra empresa)<input id="ctTrab" value="${esc(c?.trabalhaPara || "")}" placeholder="ex.: Cerus Bank"></label>
       <label>Observação sobre essa relação<input id="ctTrabObs" value="${esc(c?.trabalhaParaObs || "")}" placeholder="ex.: informado pelo conselho"></label>
       <label>Contar só lançamentos com o texto<input id="ctFiltro" value="${esc(c?.filtro || "")}" placeholder="ex.: ASSESSORIA (opcional)"></label>
@@ -2282,7 +2289,7 @@ function lerFormContrato() {
     tipo: $("#ctTipo").value.trim(), modalidade: $("#ctModal").value, valorTotal: parseValor($("#ctTotal").value) || null, parcelas: +$("#ctParc").value || null, formaPagamento: $("#ctFormaPg").value.trim(), multaRescisoria: $("#ctMultaR").value.trim(), indeterminado: $("#ctIndet").checked,
     diaVenc: +$("#ctDia").value || null, inicio: $("#ctIni").value, prazoMeses: +$("#ctPrazo").value || null, renovacaoAuto: $("#ctRenova").checked, fim: $("#ctFim").value,
     avisoDias: +$("#ctAviso").value || null, reajuste: $("#ctReaj").value.trim(), multa: $("#ctMulta").value.trim(), adicionais: adic, tol: parseValor($("#ctTol").value) || 2,
-    natureza: $("#ctNat").value, valorRegra: $("#ctRegra").value.trim(), trabalhaPara: $("#ctTrab").value.trim(), trabalhaParaObs: $("#ctTrabObs").value.trim(), filtro: $("#ctFiltro").value.trim(), link: urlValida($("#ctLink").value.trim()) ? $("#ctLink").value.trim() : "" };
+    natureza: $("#ctNat").value, valorRegra: $("#ctRegra").value.trim(), trabalhaPara: $("#ctTrab").value.trim(), aprovadoEm: $("#ctAprov").value, aprovadoObs: $("#ctAprovObs").value.trim(), trabalhaParaObs: $("#ctTrabObs").value.trim(), filtro: $("#ctFiltro").value.trim(), link: urlValida($("#ctLink").value.trim()) ? $("#ctLink").value.trim() : "" };
 }
 
 // ---------------------------------------------------------------- proposta de orçamento
