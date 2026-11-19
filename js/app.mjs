@@ -22,6 +22,59 @@ function toast(msg) { const t = $("#toast"); t.textContent = msg; t.hidden = fal
 
 const S = { base: {}, locais: {}, todos: [], meses: [], sev: new Set(["alta", "media", "baixa", "info"]), ids: null, limite: 300 };
 
+// ---------------------------------------------------------------- atualização enviada por link (#atualizar=...)
+// os dados viajam só no link (nunca no código publicado) e são gravados na base protegida por um administrador
+async function lerPacote(cod) {
+  const b64 = cod.replace(/-/g, "+").replace(/_/g, "/") + "===".slice((cod.length + 3) % 4);
+  const bin = Uint8Array.from(atob(b64), (ch) => ch.charCodeAt(0));
+  const txt = await new Response(new Blob([bin]).stream().pipeThrough(new DecompressionStream("deflate-raw"))).text();
+  return JSON.parse(txt);
+}
+if (/^#atualizar=/.test(location.hash)) {
+  const cod = location.hash.slice(11);
+  try { sessionStorage.setItem("farol.pacote", cod); } catch {}
+  history.replaceState(null, "", location.pathname + location.search + "#contratos");
+}
+S.pacoteCod = (() => { try { return sessionStorage.getItem("farol.pacote") || ""; } catch { return ""; } })();
+async function mostrarPacote() {
+  if (!S.pacoteCod || S.pacoteMostrado) return;
+  const el = $("#bannerPacote"); if (!el) return;
+  if (AC.ligado && !ehAdmin()) { el.hidden = false; $("#bannerPacoteTxt").textContent = "Há uma atualização de contratos e da análise para gravar. Entre com um usuário administrador para aplicá-la."; $("#pacoteAplicar").hidden = true; return; }
+  try { S.pacote = await lerPacote(S.pacoteCod); } catch { el.hidden = false; $("#bannerPacoteTxt").textContent = "O link de atualização está incompleto ou corrompido."; $("#pacoteAplicar").hidden = true; return; }
+  S.pacoteMostrado = true; $("#pacoteAplicar").hidden = false;
+  const pc = S.pacote, ex = (pc.contratos || []).filter((x) => (S.contratos || []).some((c) => doContrato(c, x.forn))).length;
+  $("#bannerPacoteTxt").textContent = `Atualização preparada em ${dataBR(pc.gerado)}: ${pc.contratos.length} contrato(s) (${ex} já cadastrado(s) serão atualizados, ${pc.contratos.length - ex} novo(s)) e ${pc.analise.length} trecho(s) da análise. Nada muda até você clicar em aplicar.`;
+  el.hidden = false;
+}
+async function aplicarPacote() {
+  const pc = S.pacote; if (!pc) return;
+  if (AC.ligado && !ehAdmin()) return;
+  const msg = (t) => ($("#bannerPacoteTxt").textContent = t);
+  const antes = S.contratos, mud = [];
+  let lista = [...(S.contratos || [])];
+  for (const x of pc.contratos || []) {
+    const i = lista.findIndex((c) => doContrato(c, x.forn));
+    if (i >= 0) { lista[i] = { ...lista[i], ...x.set, forn: x.forn, id: lista[i].id, link: lista[i].link || x.set.link || "", por: nomeUsuario(), ts: new Date().toISOString() }; mud.push(`${x.forn} (atualizado)`); }
+    else { lista.push({ ...x.set, forn: x.forn, id: novoId(), por: nomeUsuario(), ts: new Date().toISOString() }); mud.push(`${x.forn} (novo)`); }
+  }
+  S.contratos = lista.sort((a, b) => a.forn.localeCompare(b.forn, "pt-BR"));
+  let html = $("#analiseCurada").innerHTML, trocas = 0;
+  for (const a of pc.analise || []) {
+    const re = new RegExp(`<li>(?:(?!</li>)[\\s\\S])*?${a.chave.replace(/[.*+?^${}()|[\]\\/]/g, "\\$&")}[\\s\\S]*?</li>`);
+    if (re.test(html)) { html = html.replace(re, a.html); trocas++; }
+    else if (a.html) { html += `\n<h3>Revisão de ${dataBR(pc.gerado)}</h3>\n<ul>\n        ${a.html}\n</ul>`; trocas++; }
+  }
+  msg("Gravando…");
+  try {
+    await salvarConteudo("contratos");
+    if (trocas) { if (AC.ligado) await gravarAnalise(html); $("#analiseCurada").innerHTML = html; }
+    registrar("Aplicou atualização", `Contratos: ${mud.join(", ")}; análise: ${trocas} trecho(s)`);
+    try { sessionStorage.removeItem("farol.pacote"); } catch {}
+    S.pacoteCod = ""; S.pacote = null; $("#bannerPacote").hidden = true;
+    render(); toast(`Atualização aplicada: ${mud.length} contrato(s) e ${trocas} trecho(s) da análise.`);
+  } catch (err) { S.contratos = antes; msg(mensagemErro(err)); }
+}
+
 // ---------------------------------------------------------------- dados
 async function carregarBase(protegido) {
   if (protegido) {
@@ -125,6 +178,7 @@ function render() {
     $("#cntAlertas").textContent = n || ""; $("#cntAlertas").hidden = !n;
     S.novidades = novidades();
     if (S.ctRenomear && (!AC.ligado || ehAdmin())) { S.ctRenomear = false; salvarConteudo("contratos").then(() => registrar("Padronizou nomes", "Fornecedores dos contratos")).catch(() => { S.ctRenomear = true; }); }
+    if (S.pacoteCod) mostrarPacote();
     painel(); acompanhamento(); renderExecutivo(S.meses, $("#secAnalises")); categorias(); fornecedores(); listaAlertas(); tabParcelas(); notas(); conselho();
     renderMes(S.todos, S.mesSel || S.meses.at(-1).mes, alertas(S.todos), $("#secMes"));
     renderProjecao(S.todos, $("#secProjecao"));
@@ -2102,6 +2156,8 @@ document.addEventListener("click", async (e) => {
   }
   // contratos
   const ce = t.closest("[data-ct-edit]"); if (ce) { S.ctEditando = ce.dataset.ctEdit; S.ctRascunho = null; contratosTab(); $("#fContrato").scrollIntoView({ block: "center" }); return; }
+  if (t.closest("#pacoteAplicar")) { aplicarPacote(); return; }
+  if (t.closest("#pacoteCancelar")) { try { sessionStorage.removeItem("farol.pacote"); } catch {} S.pacoteCod = ""; $("#bannerPacote").hidden = true; return; }
   const cmo = t.closest("[data-ct-modo]"); if (cmo) { S.ctModoComp = cmo.dataset.ctModo; contratosTab(); $("#ctFicha .ct-tab-ctl")?.scrollIntoView({ block: "center" }); return; }
   const cfl = t.closest("[data-ct-filtro]"); if (cfl) { S.ctFiltro = cfl.dataset.ctFiltro; contratosTab(); return; }
   if (t.closest("#ctCancelar")) { S.ctEditando = ""; S.ctRascunho = null; contratosTab(); return; }
