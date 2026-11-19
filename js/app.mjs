@@ -6,7 +6,7 @@ import { textoDoArquivo, lerContrato, fimVigente } from "./contratos.mjs";
 import { AC, PERFIS, podeEditar, ehAdmin, normUsuario, validarSenha, mensagemErro, carregarFirebase, existeAdministrador, entrar, sair, aoMudarSessao,
   lerPerfil, registrarAcesso, trocarSenha, criarPrimeiroAdmin, criarAcesso, novaSenhaProvisoria, atualizarAcesso, listarAcessos,
   lerDados, gravarMeses, gravarAnalise, gravarAcomp, ouvirAcomp, gravarOrcamento, nomeUsuario, gravarContratos, gravarFundo, registrar, lerRegistros, REGRAS } from "./acesso.mjs";
-import { rotuloMes, r2, lancamentos, resumoMensal, porCategoria, porFornecedor, parcelas, indicadores, alertas } from "./analise.mjs";
+import { rotuloMes, r2, lancamentos, resumoMensal, porCategoria, porFornecedor, parcelas, indicadores, alertas, datasErradasNota } from "./analise.mjs";
 
 const $ = (s) => document.querySelector(s);
 const brl = (v) => (v ?? 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
@@ -747,7 +747,7 @@ function notas() {
   const ms = [...S.meses].reverse().filter((b) => (b.notas || []).some((n) => n.grupo === "específica"));
   $("#listaNotas").innerHTML = ms.length ? ms.map((b) => `<article class="alerta ${b.notas.some((n) => /duplicidade|falta de saldo/i.test(n.texto)) ? "media" : ""}">
     <div class="linha1"><span class="eyebrow">${rotuloMes(b.mes)}</span><span class="mini">emitido em ${esc(b.emissao)}</span></div>
-    <pre>${esc(b.notas.filter((n) => n.grupo === "específica").map((n) => n.texto).join("\n\n"))}</pre></article>`).join("")
+    <pre>${b.notas.filter((n) => n.grupo === "específica").map((n) => { let h = esc(n.texto); for (const x of datasErradasNota(n.texto, b, S.todos)) h = h.split(esc(x.orig)).join(`<mark class="data-err" data-tip="${esc(`Data incompleta no balancete.${x.sug ? ` Provável: ${x.sug}. ${x.motivo}` : ""}`)}">${esc(x.orig)}</mark>${x.sug ? ` <span class="data-sug">[provável ${esc(x.sug)}]</span>` : ""}`); return h; }).join("\n\n")}</pre></article>`).join("")
     : `<div class="vazio card">Sem notas específicas no período.</div>`;
 }
 

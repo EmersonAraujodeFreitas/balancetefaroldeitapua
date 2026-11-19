@@ -512,6 +512,36 @@ const refChave = (ref) => { const m = /(\d{2})\/(\d{4})/.exec(ref || ""); return
 const kwh = (desc) => { const m = /Consumo Ativo de\s*([\d.,]+)\s*kWh/i.exec(desc); return m ? Math.round(num(m[1].includes(",") ? m[1] : m[1] + ",00")) : null; };
 const mesesEntre = (a, b) => { const [ya, ma] = a.split("-").map(Number), [yb, mb] = b.split("-").map(Number); return (yb - ya) * 12 + (mb - ma) + 1; };
 
+// datas impossíveis nas notas da administradora (ex.: 20/0/2026) e a data provável, deduzida dos lançamentos do mês
+const fmtV = (v) => v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+function datasErradasNota(texto, b, meses = []) {
+  const out = [], forn = identificarFornecedor(texto);
+  const validas = [...texto.matchAll(/\b(\d{2})\/(\d{2})\/(\d{4})\b/g)].filter((m) => +m[2] >= 1 && +m[2] <= 12 && +m[1] >= 1 && +m[1] <= 31);
+  for (const m of texto.matchAll(/\b(\d{1,2})\/(\d{0,2})\/(\d{4})\b/g)) {
+    const [orig, dd, mm, aa] = m;
+    if (mm.length === 2 && +mm >= 1 && +mm <= 12 && +dd >= 1 && +dd <= 31 && dd.length === 2) continue;
+    const res = { orig, sug: "", motivo: "", ids: [] };
+    const doForn = forn ? b.despesas.map((d, i) => ({ ...d, id: `${b.mes}#${i}` })).filter((d) => d.forn === forn) : [];
+    const citados = new Set(validas.map((v) => `${v[2]}/${v[3]}`));
+    const cands = [...new Set(doForn.map((d) => d.ref).filter((r) => /^\d{2}\/\d{4}$/.test(r || "") && r.endsWith(aa) && !citados.has(r) && r.startsWith(mm.length ? mm : "")))];
+    if (cands.length === 1 && dd.length === 2) {
+      res.sug = `${dd}/${cands[0]}`;
+      const ls = doForn.filter((d) => d.ref === cands[0] || citados.has(d.ref));
+      res.ids = ls.map((d) => d.id);
+      res.motivo = `No mesmo balancete, ${forn} tem ${ls.length} pagamento(s) com as competências ${ls.map((d) => `${d.ref} (${fmtV(d.v)}, pago em ${d.baixa})`).join(" e ")}; a nota já cita ${[...citados].map((c) => `${dd}/${c}`).join(", ") || "outra data"}, então a data incompleta é a da competência ${cands[0]}.`;
+      const tot = /(?:valor total|no valor) de R\$\s*([\d.]+,\d{2})/i.exec(texto);
+      if (tot) {
+        const vals = meses.flatMap((x) => x.despesas.filter((d) => d.forn === forn).map((d) => d.v)), freq = {};
+        for (const v of vals) freq[v] = (freq[v] || 0) + 1;
+        const base = +Object.entries(freq).sort((a, b2) => b2[1] - a[1])[0]?.[0];
+        const exc = ls.map((d) => Math.round((d.v - base) * 100) / 100), alvo = +tot[1].replace(/\./g, "").replace(",", ".");
+        if (base && exc.every((e) => e > 0) && Math.abs(exc.reduce((a, e) => a + e, 0) - alvo) < 0.015) res.motivo += ` Os encargos também conferem: ${exc.map(fmtV).join(" + ")} acima do valor normal de ${fmtV(base)} = ${fmtV(alvo)}.`;
+      }
+    }
+    out.push(res);
+  }
+  return out;
+}
 function alertas(meses) {
   const A = [];
   const add = (sev, tipo, titulo, detalhe, pergunta, ids = [], mes = null, forn = null) => { const a = { sev, tipo, titulo, detalhe, pergunta, ids, mes, forn }; A.push(a); return a; };
@@ -675,6 +705,9 @@ function alertas(meses) {
   // 7. notas explicativas que pedem atenção
   for (const b of meses) for (const n of b.notas || []) {
     const t = n.texto, forn = identificarFornecedor(t);
+    for (const x of datasErradasNota(t, b, meses)) add("baixa", "Nota explicativa", `${rotuloMes(b.mes)}: data incompleta na nota da administradora (${x.orig})`,
+      `${t}\n\n${x.sug ? `Provável data correta: ${x.sug}. ${x.motivo}` : "Não foi possível deduzir a data pelos lançamentos do mês."}`,
+      `Pedir à administradora corrigir a data "${x.orig}" na nota do balancete de ${rotuloMes(b.mes)}${x.sug ? ` (deve ser ${x.sug})` : ""}.`, x.ids, b.mes, forn);
     if (/duplicidade/i.test(t)) {
       const nfN = (t.match(/(?:NF|nota fiscal)\s*(?:n[º°o]\s*)?(\d+)/i) || [])[1];
       const ja = A.find((a) => a.tipo === "Pagamento em duplicidade" && nfN && a.titulo.includes(`NF ${nfN}`));
@@ -2959,7 +2992,7 @@ function notas() {
   const ms = [...S.meses].reverse().filter((b) => (b.notas || []).some((n) => n.grupo === "específica"));
   $("#listaNotas").innerHTML = ms.length ? ms.map((b) => `<article class="alerta ${b.notas.some((n) => /duplicidade|falta de saldo/i.test(n.texto)) ? "media" : ""}">
     <div class="linha1"><span class="eyebrow">${rotuloMes(b.mes)}</span><span class="mini">emitido em ${esc(b.emissao)}</span></div>
-    <pre>${esc(b.notas.filter((n) => n.grupo === "específica").map((n) => n.texto).join("\n\n"))}</pre></article>`).join("")
+    <pre>${b.notas.filter((n) => n.grupo === "específica").map((n) => { let h = esc(n.texto); for (const x of datasErradasNota(n.texto, b, S.todos)) h = h.split(esc(x.orig)).join(`<mark class="data-err" data-tip="${esc(`Data incompleta no balancete.${x.sug ? ` Provável: ${x.sug}. ${x.motivo}` : ""}`)}">${esc(x.orig)}</mark>${x.sug ? ` <span class="data-sug">[provável ${esc(x.sug)}]</span>` : ""}`); return h; }).join("\n\n")}</pre></article>`).join("")
     : `<div class="vazio card">Sem notas específicas no período.</div>`;
 }
 
