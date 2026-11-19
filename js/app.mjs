@@ -44,7 +44,7 @@ async function mostrarPacote() {
   try { S.pacote = await lerPacote(S.pacoteCod); } catch { el.hidden = false; $("#bannerPacoteTxt").textContent = "O link de atualização está incompleto ou corrompido."; $("#pacoteAplicar").hidden = true; return; }
   S.pacoteMostrado = true; $("#pacoteAplicar").hidden = false;
   const pc = S.pacote, ex = (pc.contratos || []).filter((x) => (S.contratos || []).some((c) => doContrato(c, x.forn))).length;
-  $("#bannerPacoteTxt").textContent = `Atualização preparada em ${dataBR(pc.gerado)}: ${pc.contratos.length} contrato(s) (${ex} já cadastrado(s) serão atualizados, ${pc.contratos.length - ex} novo(s)) e ${pc.analise.length} trecho(s) da análise. Nada muda até você clicar em aplicar.`;
+  $("#bannerPacoteTxt").textContent = `Atualização preparada em ${dataBR(pc.gerado)}: ${pc.contratos.length} contrato(s) (${ex} já cadastrado(s) serão atualizados, ${pc.contratos.length - ex} novo(s))${(pc.agenda || []).length ? `, ${pc.agenda.length} assembleia(s) para a agenda` : ""} e ${pc.analise.length} trecho(s) da análise. Nada muda até você clicar em aplicar.`;
   el.hidden = false;
 }
 async function aplicarPacote() {
@@ -59,6 +59,9 @@ async function aplicarPacote() {
     else { lista.push({ ...x.set, forn: x.forn, id: novoId(), por: nomeUsuario(), ts: new Date().toISOString() }); mud.push(`${x.forn} (novo)`); }
   }
   S.contratos = lista.sort((a, b) => a.forn.localeCompare(b.forn, "pt-BR"));
+  let novosAg = 0;
+  for (const a of pc.agenda || []) if (a.id && a.id.startsWith("ag:") && (!S.acomp[a.id] || S.acomp[a.id].removido)) { S.acomp[a.id] = { ...a, id: undefined, por: nomeUsuario(), ts: new Date().toISOString() }; delete S.acomp[a.id].id; novosAg++; }
+  if (novosAg) { ls.set(LS_ACOMP, S.acomp); agendarSync(); }
   let html = $("#analiseCurada").innerHTML, trocas = 0;
   for (const a of pc.analise || []) {
     const re = new RegExp(`<li>(?:(?!</li>)[\\s\\S])*?${a.chave.replace(/[.*+?^${}()|[\]\\/]/g, "\\$&")}[\\s\\S]*?</li>`);
@@ -69,10 +72,10 @@ async function aplicarPacote() {
   try {
     await salvarConteudo("contratos");
     if (trocas) { if (AC.ligado) await gravarAnalise(html); $("#analiseCurada").innerHTML = html; }
-    registrar("Aplicou atualização", `Contratos: ${mud.join(", ")}; análise: ${trocas} trecho(s)`);
+    registrar("Aplicou atualização", `Contratos: ${mud.join(", ")}; agenda: ${novosAg}; análise: ${trocas} trecho(s)`);
     try { sessionStorage.removeItem("farol.pacote"); } catch {}
     S.pacoteCod = ""; S.pacote = null; $("#bannerPacote").hidden = true;
-    render(); toast(`Atualização aplicada: ${mud.length} contrato(s) e ${trocas} trecho(s) da análise.`);
+    render(); toast(`Atualização aplicada: ${mud.length} contrato(s)${novosAg ? `, ${novosAg} assembleia(s) na agenda` : ""} e ${trocas} trecho(s) da análise.`);
   } catch (err) { S.contratos = antes; msg(mensagemErro(err)); }
 }
 
@@ -1900,6 +1903,9 @@ function vereditoExcedente(c, E) {
   const cart = r2(E.avs.filter((d) => /cartor|registro|custas/.test(normTxt(`${d.item} ${d.desc}`))).reduce((s2, d) => s2 + d.v, 0));
   return { literal, favoravel, multas, assIsentas, cart, de: acima[0]?.mes, ate: acima.at(-1)?.mes, minInd: r2(Math.max(0, favoravel - multas) + assIsentas), maxInd: r2(literal + assIsentas) };
 }
+// assembleias registradas na Agenda (tipo Assembleia), em ordem
+const assembleiasReg = () => Object.entries(S.acomp || {}).filter(([k, v]) => k.startsWith("ag:") && v && !v.removido && v.tipo === "assembleia" && v.data).map(([k, v]) => ({ ...v, id: k })).sort((a, b) => a.data.localeCompare(b.data));
+const datasDoTexto = (t) => [...String(t || "").matchAll(/(\d{2})\/(\d{2})\/(\d{4})/g)].map((m) => `${m[3]}-${m[2]}-${m[1]}`);
 function cruzamentos(c) {
   const lista = S.contratos || [], out = [];
   const sec = lista.find((x) => x.securitizacao), jur = lista.find(ehCobrancaJuridica);
@@ -1936,12 +1942,18 @@ function cruzamentos(c) {
     const Ej2 = jur ? (() => { try { return explicarContrato(jur); } catch { return null; } })() : null;
     const assCobrada = Ej2 && sec.aprovadoEm ? Ej2.avs.find((d) => /assembl/.test(normTxt(`${d.item} ${d.desc}`)) && (d.det || "").includes(dataBR(sec.aprovadoEm))) : null;
     const perg = [];
-    if (jur && !jur.aprovadoEm) perg.push({ tema: "Aprovação", q: `Em qual assembleia foi aprovada a contratação da ${jur.forn}, com mensalidade de ${brl(jur.valor)}, honorários de êxito e renovação automática?`, porque: `O contrato foi assinado pelo síndico em ${dataBR(jur.assinatura || dIni(jur))} e não há assembleia de aprovação registrada.`, doc: "Ata da assembleia que aprovou a contratação e a proposta apresentada." });
+    const AS = assembleiasReg(), agi = AS.find((a) => /instala|\bagi\b/i.test(`${a.titulo} ${a.obs || ""}`)), age1 = AS.find((a) => !/instala|\bagi\b/i.test(`${a.titulo} ${a.obs || ""}`));
+    const assJ = jur ? (jur.assinatura || dIni(jur)) : "";
+    if (jur && !jur.aprovadoEm) perg.push({ tema: "Aprovação", q: `Em qual assembleia foi aprovada a contratação da ${jur.forn}, com mensalidade de ${brl(jur.valor)}, honorários de êxito e renovação automática?`, porque: `O contrato foi assinado pelo síndico em ${dataBR(assJ)}${age1 && assJ < age1.data ? `, antes da primeira assembleia extraordinária (${dataBR(age1.data)})${agi ? `; só a assembleia de instalação (${dataBR(agi.data)}) poderia tê-lo aprovado antes` : ""}` : ""}, e não há assembleia de aprovação registrada.`, doc: agi && age1 && assJ < age1.data ? `Ata da assembleia de instalação de ${dataBR(agi.data)} (para ver se a contratação foi aprovada nela) ou a ata que ratificou o contrato depois.` : "Ata da assembleia que aprovou a contratação e a proposta apresentada." });
+    if (sec.aprovadoEm && AS.length && !AS.some((a) => a.data === sec.aprovadoEm)) perg.push({ tema: "Aprovação", q: `Em que data, exatamente, a assembleia aprovou a ${sec.forn}?`, porque: `A aprovação foi informada como ${dataBR(sec.aprovadoEm)}, mas as assembleias registradas são ${AS.map((a) => `${dataBR(a.data)} (${a.titulo})`).join(" e ")}. Não há assembleia registrada em ${dataBR(sec.aprovadoEm)}.`, doc: `Ata da assembleia que aprovou a ${sec.forn}.` });
     if (sec.aprovadoEm) perg.push({ tema: "Aprovação", q: `A assembleia de ${dataBR(sec.aprovadoEm)} aprovou as condições que estão no contrato da ${sec.forn}: a Duos Síndicos 360 Ltda assinando como securitizada, ${String(sec.securitizacao?.pct || 2.5).replace(".", ",")}% + R$ ${String((sec.securitizacao?.porTitulo || 3).toFixed(2)).replace(".", ",")} por boleto, desconto obrigatório de ${sec.securitizacao?.desconto || 10}%, renovação automática e devolução do antecipado na saída?`, porque: `A assembleia aprovou a ${sec.forn} em ${dataBR(sec.aprovadoEm)}; o contrato foi assinado depois, em ${dataBR(sec.assinatura || dIni(sec))}, com a empresa do síndico como parte. É preciso conferir se o que foi assinado é o que foi aprovado.`, doc: `Ata de ${dataBR(sec.aprovadoEm)}, lista de presença e a proposta da ${sec.forn} apresentada na assembleia.` });
     else perg.push({ tema: "Aprovação", q: `Em qual assembleia foi aprovada a securitização das taxas com a ${sec.forn}?`, porque: `O contrato da ${sec.forn} exige aprovação em assembleia (cláusula 11ª).`, doc: "Ata da assembleia e lista de presença." });
     if (quem) perg.push({ tema: "Aprovação", q: `Por que quem assina o contrato da ${sec.forn} como securitizada é a Duos Síndicos 360 Ltda, e não o condomínio? A empresa do síndico recebe algum valor dessa operação?`, porque: "O crédito securitizado é do condomínio, mas a parte do contrato é a empresa do síndico; o condomínio só anui.", doc: `Contrato completo com a ${sec.forn}, anexos e eventuais aditivos, e declaração de que a Duos não recebe comissão.` });
     if (assCobrada && trabalhaPara(jur, sec)) perg.push({ tema: "Contratos", q: `A ${jur.forn} assessorou a assembleia de ${dataBR(sec.aprovadoEm)}, que aprovou a ${sec.forn}? Nessa data ela já era contratada da ${sec.forn}?`, porque: `O escritório cobrou ${brl(assCobrada.v)} do condomínio por essa assembleia e também é contratado da ${sec.forn}. Se já era, orientou a assembleia sobre um contrato do qual se beneficiaria.`, doc: `Data do contrato entre a ${sec.forn} e a ${jur.forn} e a ata de ${dataBR(sec.aprovadoEm)}.` });
-    out.push({ outro: null, titulo: "Aprovação em assembleia", txt: `${nomes}.${sec.aprovadoEm ? ` A ${sec.forn} foi aprovada em assembleia antes da assinatura, mas o contrato assinado tem a Duos Síndicos 360 Ltda, empresa do síndico, como securitizada, e o condomínio só como interveniente: é preciso conferir se a assembleia aprovou essas condições.` : quem ? ` No da ${sec.forn}, quem assina como securitizada é a Duos Síndicos 360 Ltda, empresa do síndico, e o condomínio aparece só como interveniente. O próprio contrato da ${sec.forn} pede assembleia para aprovar a securitização.` : ""}${assCobrada ? ` A assembleia de ${dataBR(sec.aprovadoEm)}, que aprovou a ${sec.forn}, foi cobrada pela ${jur.forn} (${brl(assCobrada.v)}), embora seja uma das primeiras após a instalação, que o contrato do escritório isenta.` : ""}`, perguntas: perg });
+    const linhaAss = AS.length ? ` Assembleias registradas na Agenda: ${AS.map((a) => `${dataBR(a.data)}, ${a.titulo}${a.obs ? ` (${a.obs})` : ""}`).join("; ")}.` : "";
+    const avisoJ = jur && age1 && assJ < age1.data ? ` O contrato da ${jur.forn} foi assinado antes da primeira assembleia extraordinária.` : "";
+    const avisoS = sec.aprovadoEm && AS.length && !AS.some((a) => a.data === sec.aprovadoEm) ? ` A data informada para a aprovação da ${sec.forn} (${dataBR(sec.aprovadoEm)}) não coincide com nenhuma assembleia registrada: confirme.` : "";
+    out.push({ outro: null, titulo: "Aprovação em assembleia", txt: `${nomes}.${linhaAss}${avisoJ}${avisoS}${sec.aprovadoEm ? ` A ${sec.forn} foi aprovada em assembleia antes da assinatura, mas o contrato assinado tem a Duos Síndicos 360 Ltda, empresa do síndico, como securitizada, e o condomínio só como interveniente: é preciso conferir se a assembleia aprovou essas condições.` : quem ? ` No da ${sec.forn}, quem assina como securitizada é a Duos Síndicos 360 Ltda, empresa do síndico, e o condomínio aparece só como interveniente. O próprio contrato da ${sec.forn} pede assembleia para aprovar a securitização.` : ""}${assCobrada ? ` A assembleia de ${dataBR(sec.aprovadoEm)}, que aprovou a ${sec.forn}, foi cobrada pela ${jur.forn} (${brl(assCobrada.v)}), embora seja uma das primeiras após a instalação, que o contrato do escritório isenta.` : ""}`, perguntas: perg });
   }
   if (sec && c.id === sec.id && sec.securitizacao?.desconto) {
     const prazo = dIni(sec) ? somaDias(dIni(sec), 365) : "", ms = securMeses(sec).filter((m) => m.fee && m.gross && !m.liquido), ult = ms.at(-1);
@@ -1965,9 +1977,11 @@ function pautaAssembleia(c) {
       for (const [nv, tit, txt] of E.ach) {
         if (tit === "Valor acima do contrato") { const ac = L.filter((l) => l.resto > 0), med = r2(ac.reduce((s2, l) => s2 + l.pc, 0) / ac.length);
           add("Valores", `Por que a ${c.forn} recebe, em média, ${brl(med)} por mês, se o contrato${ref} fixa ${brl(c.valor)}?`, `De ${rotCurto(ac[0].mes)} a ${rotCurto(ac.at(-1).mes)} foram pagos ${brl(E.comp.semExpl)} acima do contrato, sem aditivo, reajuste ou explicação nos balancetes.`, "Notas fiscais com a composição de cada valor e o aditivo ou a ata que autorizou o aumento."); }
-        else if (tit === "Pagamentos fora da mensalidade" && (E.comp.aSem > 0 || /exceto|salvo/.test(txt))) {
+        else if (tit === "Pagamentos fora da mensalidade") {
           const ass = E.avs.filter((d) => /assembl/i.test(`${d.item} ${d.desc}`)).map((d) => (/(\d{2}\/\d{2}\/\d{4})/.exec(d.det || "") || [])[1]).filter(Boolean);
-          if (ass.length && /exceto|salvo/.test(txt)) add("Valores", `As assembleias de ${[...new Set(ass)].join(" e ")}, cobradas pela ${c.forn}, estão entre as 3 primeiras após a instalação? Se estão, por que foram cobradas?`, `O contrato cobra 40% do salário mínimo por assembleia, mas isenta as 3 primeiras após a assembleia de instalação, e essas foram logo depois dela.`, "Lista das assembleias realizadas desde a instalação e os recibos cobrados.");
+          const ASr = assembleiasReg(), assBR = [...new Set(ass)], foraReg = ASr.length ? assBR.filter((d) => !ASr.some((x) => dataBR(x.data) === d)) : [];
+          if (foraReg.length) add("Valores", `Houve assembleia em ${foraReg.join(" e ")}? A ${c.forn} cobrou por ${foraReg.length > 1 ? "elas" : "ela"}.`, `As assembleias registradas são ${ASr.map((x) => `${dataBR(x.data)} (${x.titulo})`).join(" e ")}. Os recibos da ${c.forn} citam ${assBR.join(" e ")}${ASr.some((x) => !/instala|\bagi\b/i.test(x.titulo)) ? `, e a primeira extraordinária foi em ${dataBR(ASr.find((x) => !/instala|\bagi\b/i.test(x.titulo)).data)}` : ""}.`, "Editais de convocação e atas das assembleias citadas nos recibos.");
+          if (ass.length && /exceto|salvo|isent/.test(txt)) add("Valores", `As assembleias de ${[...new Set(ass)].join(" e ")}, cobradas pela ${c.forn}, estão entre as 3 primeiras após a instalação? Se estão, por que foram cobradas?`, `O contrato cobra 40% do salário mínimo por assembleia, mas isenta as 3 primeiras após a assembleia de instalação, e essas foram logo depois dela.`, "Lista das assembleias realizadas desde a instalação e os recibos cobrados.");
           if (E.comp.aSem > 0) add("Valores", `Quem autorizou os ${brl(E.comp.aSem)} pagos à ${c.forn} fora do contrato?`, txt, "Orçamentos, aprovação (ata ou autorização do síndico) e notas fiscais de cada serviço.");
         }
         else if (tit === "Competências sem pagamento") add("Prestação de contas", `As competências ${L.filter((l) => l.st === "ausente").map((l) => rotCurto(l.mes)).join(", ")} da ${c.forn} estão pagas? Em qual nota?`, txt, "Notas fiscais e comprovantes desses meses.");
